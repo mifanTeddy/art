@@ -16,8 +16,33 @@
       <p>Local generative art playground. Pick a style and let it evolve.</p>
 
       <div class="controls">
-        <label for="modeSelect">Mode</label>
-        <select id="modeSelect"></select>
+        <label for="categorySelect">Category</label>
+        <select id="categorySelect">
+          <option value="classic">Classic Canvas</option>
+          <option value="shader3d">Shader 3D</option>
+          <option value="combo">Mode Combiner</option>
+        </select>
+
+        <div id="classicGroup" class="mode-group">
+          <label for="modeSelect">Classic Mode</label>
+          <select id="modeSelect"></select>
+        </div>
+
+        <div id="shaderGroup" class="mode-group">
+          <label for="shaderModeSelect">Shader 3D Mode</label>
+          <select id="shaderModeSelect"></select>
+        </div>
+
+        <div id="comboGroup" class="mode-group">
+          <label for="comboModeASelect">Combine A</label>
+          <select id="comboModeASelect"></select>
+
+          <label for="comboModeBSelect">Combine B</label>
+          <select id="comboModeBSelect"></select>
+
+          <label for="comboBlendSelect">Blend</label>
+          <select id="comboBlendSelect"></select>
+        </div>
 
         <label for="paletteSelect">Palette</label>
         <select id="paletteSelect"></select>
@@ -38,7 +63,9 @@
 
         <section class="random-options">
           <p>Random Attributes</p>
+          <label class="check-item"><input id="randCategory" type="checkbox"> Category</label>
           <label class="check-item"><input id="randMode" type="checkbox" checked> Mode</label>
+          <label class="check-item"><input id="randBlend" type="checkbox"> Blend (Combiner)</label>
           <label class="check-item"><input id="randPalette" type="checkbox" checked> Palette</label>
           <label class="check-item"><input id="randSeed" type="checkbox" checked> Seed</label>
           <label class="check-item"><input id="randDensity" type="checkbox" checked> Density</label>
@@ -59,7 +86,8 @@
     </section>
 
     <section class="canvas-frame">
-      <canvas id="artCanvas" aria-label="Generative art canvas"></canvas>
+      <canvas id="artCanvas" class="render-canvas" aria-label="Generative art canvas"></canvas>
+      <canvas id="glCanvas" class="render-canvas" aria-label="Generative art shader canvas"></canvas>
     </section>
   </main>
 

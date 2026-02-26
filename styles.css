@@ -92,6 +92,11 @@ body {
   gap: 0.45rem;
 }
 
+.mode-group {
+  display: grid;
+  gap: 0.35rem;
+}
+
 .range-block {
   margin-top: 0.5rem;
   display: grid;
@@ -206,6 +211,7 @@ button:hover {
 }
 
 .canvas-frame {
+  position: relative;
   border-radius: 28px;
   border: 1px solid rgba(16, 33, 50, 0.12);
   box-shadow: var(--frame-shadow);
@@ -214,10 +220,16 @@ button:hover {
   animation: stage-in 0.85s ease both;
 }
 
-#artCanvas {
+.render-canvas {
+  position: absolute;
+  inset: 0;
   display: block;
   width: 100%;
   height: 100%;
+}
+
+#glCanvas {
+  display: none;
 }
 
 @keyframes panel-in {

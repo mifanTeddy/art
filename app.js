@@ -1,5 +1,4 @@
 const canvas = document.getElementById("artCanvas");
-const ctx = canvas.getContext("2d");
 
 const modeSelect = document.getElementById("modeSelect");
 const paletteSelect = document.getElementById("paletteSelect");
@@ -468,18 +467,104 @@ const GRID_VARIANTS = {
   }
 };
 
+const shaderModeDefs = [
+  { id: "nebula3d", label: "Nebula Volume" },
+  { id: "tunnel3d", label: "Warp Tunnel" },
+  { id: "metaball3d", label: "Metaball Galaxy" }
+];
+
+const blendDefs = [
+  { id: "screen", label: "Screen" },
+  { id: "lighter", label: "Additive" },
+  { id: "multiply", label: "Multiply" },
+  { id: "source-over", label: "Normal" }
+];
+
 const modeMap = new Map(modeDefs.map((mode) => [mode.id, mode]));
+const shaderModeMap = new Map(shaderModeDefs.map((mode) => [mode.id, mode]));
+const blendMap = new Map(blendDefs.map((blend) => [blend.id, blend]));
+
+const categorySelect = document.getElementById("categorySelect");
+const classicGroup = document.getElementById("classicGroup");
+const shaderGroup = document.getElementById("shaderGroup");
+const comboGroup = document.getElementById("comboGroup");
+const shaderModeSelect = document.getElementById("shaderModeSelect");
+const comboModeASelect = document.getElementById("comboModeASelect");
+const comboModeBSelect = document.getElementById("comboModeBSelect");
+const comboBlendSelect = document.getElementById("comboBlendSelect");
+
+const randCategory = document.getElementById("randCategory");
+const randBlend = document.getElementById("randBlend");
+
+const glCanvas = document.getElementById("glCanvas");
+const baseCtx2d = canvas.getContext("2d");
+let ctx = baseCtx2d;
+
+const comboLayerA = document.createElement("canvas");
+const comboLayerB = document.createElement("canvas");
+const comboCtxA = comboLayerA.getContext("2d");
+const comboCtxB = comboLayerB.getContext("2d");
+
+const shaderState = {
+  gl: null,
+  ready: false,
+  failed: false,
+  program: null,
+  position: null,
+  uniforms: null,
+  buffer: null
+};
 
 let dpr = Math.max(1, Math.min(2, window.devicePixelRatio || 1));
 let width = 1;
 let height = 1;
 let animationId = 0;
 
+URL_KEYS.category = "c";
+URL_KEYS.shaderMode = "sm";
+URL_KEYS.comboA = "a";
+URL_KEYS.comboB = "b";
+URL_KEYS.comboBlend = "bm";
+
+state.category = "classic";
+state.shaderMode = "nebula3d";
+state.combo = {
+  modeA: "flow",
+  modeB: "aurora",
+  blend: "screen",
+  dataA: null,
+  dataB: null
+};
+
 for (const mode of modeDefs) {
   const option = document.createElement("option");
   option.value = mode.id;
   option.textContent = mode.label;
   modeSelect.appendChild(option);
+
+  const optionA = document.createElement("option");
+  optionA.value = mode.id;
+  optionA.textContent = mode.label;
+  comboModeASelect.appendChild(optionA);
+
+  const optionB = document.createElement("option");
+  optionB.value = mode.id;
+  optionB.textContent = mode.label;
+  comboModeBSelect.appendChild(optionB);
+}
+
+for (const mode of shaderModeDefs) {
+  const option = document.createElement("option");
+  option.value = mode.id;
+  option.textContent = mode.label;
+  shaderModeSelect.appendChild(option);
+}
+
+for (const blend of blendDefs) {
+  const option = document.createElement("option");
+  option.value = blend.id;
+  option.textContent = blend.label;
+  comboBlendSelect.appendChild(option);
 }
 
 for (const name of Object.keys(palettes)) {
@@ -492,6 +577,7 @@ for (const name of Object.keys(palettes)) {
 applyStateFromUrl();
 sanitizeState();
 syncControlsFromState();
+updateCategoryUI();
 updateHistoryUI();
 
 function mulberry32(seed) {
@@ -581,6 +667,11 @@ function hexToRgb(hex) {
   return [r, g, b];
 }
 
+function hexToRgb01(hex) {
+  const [r, g, b] = hexToRgb(hex);
+  return [r / 255, g / 255, b / 255];
+}
+
 function withAlpha(hex, alpha) {
   const [r, g, b] = hexToRgb(hex);
   return `rgba(${r}, ${g}, ${b}, ${clamp(alpha, 0, 1)})`;
@@ -623,8 +714,30 @@ function clearWithAlpha(alpha) {
   ctx.fillRect(0, 0, width, height);
 }
 
+function getMode(modeId = state.mode) {
+  return modeMap.get(modeId) || modeDefs[0];
+}
+
+function setCanvasVisibility() {
+  const shaderActive = state.category === "shader3d";
+  canvas.style.display = shaderActive ? "none" : "block";
+  glCanvas.style.display = shaderActive ? "block" : "none";
+}
+
+function updateCategoryUI() {
+  classicGroup.style.display = state.category === "classic" ? "grid" : "none";
+  shaderGroup.style.display = state.category === "shader3d" ? "grid" : "none";
+  comboGroup.style.display = state.category === "combo" ? "grid" : "none";
+  setCanvasVisibility();
+}
+
 function sanitizeState() {
+  if (!["classic", "shader3d", "combo"].includes(state.category)) state.category = "classic";
   if (!modeMap.has(state.mode)) state.mode = modeDefs[0].id;
+  if (!shaderModeMap.has(state.shaderMode)) state.shaderMode = shaderModeDefs[0].id;
+  if (!modeMap.has(state.combo.modeA)) state.combo.modeA = modeDefs[0].id;
+  if (!modeMap.has(state.combo.modeB)) state.combo.modeB = modeDefs[1].id;
+  if (!blendMap.has(state.combo.blend)) state.combo.blend = blendDefs[0].id;
   if (!palettes[state.paletteName]) state.paletteName = Object.keys(palettes)[0];
 
   state.seed = clamp(Math.floor(parseIntSafe(state.seed, 1)), 1, 9999999);
@@ -638,7 +751,14 @@ function sanitizeState() {
 
 function snapshotState() {
   return {
+    category: state.category,
     mode: state.mode,
+    shaderMode: state.shaderMode,
+    combo: {
+      modeA: state.combo.modeA,
+      modeB: state.combo.modeB,
+      blend: state.combo.blend
+    },
     paletteName: state.paletteName,
     seed: state.seed,
     params: {
@@ -651,7 +771,12 @@ function snapshotState() {
 
 function snapshotsEqual(a, b) {
   return (
+    a.category === b.category &&
     a.mode === b.mode &&
+    a.shaderMode === b.shaderMode &&
+    a.combo.modeA === b.combo.modeA &&
+    a.combo.modeB === b.combo.modeB &&
+    a.combo.blend === b.combo.blend &&
     a.paletteName === b.paletteName &&
     a.seed === b.seed &&
     a.params.density === b.params.density &&
@@ -662,7 +787,14 @@ function snapshotsEqual(a, b) {
 
 function pushHistory(snapshot) {
   const next = {
+    category: snapshot.category,
     mode: snapshot.mode,
+    shaderMode: snapshot.shaderMode,
+    combo: {
+      modeA: snapshot.combo.modeA,
+      modeB: snapshot.combo.modeB,
+      blend: snapshot.combo.blend
+    },
     paletteName: snapshot.paletteName,
     seed: snapshot.seed,
     params: {
@@ -689,7 +821,12 @@ function updateHistoryUI() {
 }
 
 function setStateFromSnapshot(snapshot) {
+  state.category = snapshot.category;
   state.mode = snapshot.mode;
+  state.shaderMode = snapshot.shaderMode;
+  state.combo.modeA = snapshot.combo.modeA;
+  state.combo.modeB = snapshot.combo.modeB;
+  state.combo.blend = snapshot.combo.blend;
   state.paletteName = snapshot.paletteName;
   state.seed = snapshot.seed;
   state.params.density = snapshot.params.density;
@@ -699,7 +836,12 @@ function setStateFromSnapshot(snapshot) {
 }
 
 function syncControlsFromState() {
+  categorySelect.value = state.category;
   modeSelect.value = state.mode;
+  shaderModeSelect.value = state.shaderMode;
+  comboModeASelect.value = state.combo.modeA;
+  comboModeBSelect.value = state.combo.modeB;
+  comboBlendSelect.value = state.combo.blend;
   paletteSelect.value = state.paletteName;
   seedInput.value = String(state.seed);
   densityRange.value = String(state.params.density);
@@ -709,11 +851,17 @@ function syncControlsFromState() {
   densityValue.textContent = formatMult(state.params.density);
   speedValue.textContent = formatMult(state.params.speed);
   lineWidthValue.textContent = formatMult(state.params.lineWidth);
+  updateCategoryUI();
 }
 
 function syncUrlFromState() {
   const url = new URL(window.location.href);
+  url.searchParams.set(URL_KEYS.category, state.category);
   url.searchParams.set(URL_KEYS.mode, state.mode);
+  url.searchParams.set(URL_KEYS.shaderMode, state.shaderMode);
+  url.searchParams.set(URL_KEYS.comboA, state.combo.modeA);
+  url.searchParams.set(URL_KEYS.comboB, state.combo.modeB);
+  url.searchParams.set(URL_KEYS.comboBlend, state.combo.blend);
   url.searchParams.set(URL_KEYS.palette, state.paletteName);
   url.searchParams.set(URL_KEYS.seed, String(state.seed));
   url.searchParams.set(URL_KEYS.density, trimFloat(state.params.density));
@@ -724,15 +872,40 @@ function syncUrlFromState() {
 
 function applyStateFromUrl() {
   const url = new URL(window.location.href);
+  const categoryParam = url.searchParams.get(URL_KEYS.category);
   const modeParam = url.searchParams.get(URL_KEYS.mode);
+  const shaderModeParam = url.searchParams.get(URL_KEYS.shaderMode);
+  const comboAParam = url.searchParams.get(URL_KEYS.comboA);
+  const comboBParam = url.searchParams.get(URL_KEYS.comboB);
+  const comboBlendParam = url.searchParams.get(URL_KEYS.comboBlend);
   const paletteParam = url.searchParams.get(URL_KEYS.palette);
   const seedParam = url.searchParams.get(URL_KEYS.seed);
   const densityParam = url.searchParams.get(URL_KEYS.density);
   const speedParam = url.searchParams.get(URL_KEYS.speed);
   const lineWidthParam = url.searchParams.get(URL_KEYS.lineWidth);
 
+  if (categoryParam) {
+    state.category = categoryParam;
+  }
+
   if (modeParam && modeMap.has(modeParam)) {
     state.mode = modeParam;
+  }
+
+  if (shaderModeParam && shaderModeMap.has(shaderModeParam)) {
+    state.shaderMode = shaderModeParam;
+  }
+
+  if (comboAParam && modeMap.has(comboAParam)) {
+    state.combo.modeA = comboAParam;
+  }
+
+  if (comboBParam && modeMap.has(comboBParam)) {
+    state.combo.modeB = comboBParam;
+  }
+
+  if (comboBlendParam && blendMap.has(comboBlendParam)) {
+    state.combo.blend = comboBlendParam;
   }
 
   if (paletteParam && palettes[paletteParam]) {
@@ -784,6 +957,268 @@ function commitChange(mutator, options = {}) {
   updateHistoryUI();
 }
 
+function buildModeData(modeId, seedValue) {
+  const prevData = state.data;
+  const prevRand = state.rand;
+  const rand = mulberry32(seedValue);
+  getMode(modeId).build(rand);
+  const data = state.data;
+  state.data = prevData;
+  state.rand = prevRand;
+  return data;
+}
+
+function drawModeWithData(modeId, data, targetCtx) {
+  const prevCtx = ctx;
+  const prevData = state.data;
+  ctx = targetCtx;
+  state.data = data;
+  getMode(modeId).draw();
+  state.data = prevData;
+  ctx = prevCtx;
+}
+
+function drawComboFrame() {
+  drawModeWithData(state.combo.modeA, state.combo.dataA, comboCtxA);
+  drawModeWithData(state.combo.modeB, state.combo.dataB, comboCtxB);
+
+  baseCtx2d.save();
+  baseCtx2d.setTransform(dpr, 0, 0, dpr, 0, 0);
+  baseCtx2d.globalCompositeOperation = "source-over";
+  baseCtx2d.globalAlpha = 1;
+  baseCtx2d.drawImage(comboLayerA, 0, 0, width, height);
+  baseCtx2d.globalCompositeOperation = state.combo.blend;
+  baseCtx2d.globalAlpha = 0.85;
+  baseCtx2d.drawImage(comboLayerB, 0, 0, width, height);
+  baseCtx2d.globalCompositeOperation = "source-over";
+  baseCtx2d.globalAlpha = 1;
+  baseCtx2d.restore();
+}
+
+function regenerateComboData() {
+  state.combo.dataA = buildModeData(state.combo.modeA, state.seed);
+  state.combo.dataB = buildModeData(state.combo.modeB, state.seed + 7919);
+
+  comboCtxA.setTransform(dpr, 0, 0, dpr, 0, 0);
+  comboCtxB.setTransform(dpr, 0, 0, dpr, 0, 0);
+  comboCtxA.fillStyle = paletteAt(0);
+  comboCtxA.fillRect(0, 0, width, height);
+  comboCtxB.fillStyle = paletteAt(0);
+  comboCtxB.fillRect(0, 0, width, height);
+  baseCtx2d.fillStyle = paletteAt(0);
+  baseCtx2d.fillRect(0, 0, width, height);
+}
+
+function compileShader(glCtx, type, source) {
+  const shader = glCtx.createShader(type);
+  glCtx.shaderSource(shader, source);
+  glCtx.compileShader(shader);
+  if (!glCtx.getShaderParameter(shader, glCtx.COMPILE_STATUS)) {
+    const error = glCtx.getShaderInfoLog(shader);
+    glCtx.deleteShader(shader);
+    throw new Error(error || "shader compile failed");
+  }
+  return shader;
+}
+
+function createShaderProgram(glCtx, vertexSource, fragmentSource) {
+  const vertex = compileShader(glCtx, glCtx.VERTEX_SHADER, vertexSource);
+  const fragment = compileShader(glCtx, glCtx.FRAGMENT_SHADER, fragmentSource);
+  const program = glCtx.createProgram();
+  glCtx.attachShader(program, vertex);
+  glCtx.attachShader(program, fragment);
+  glCtx.linkProgram(program);
+  glCtx.deleteShader(vertex);
+  glCtx.deleteShader(fragment);
+  if (!glCtx.getProgramParameter(program, glCtx.LINK_STATUS)) {
+    const error = glCtx.getProgramInfoLog(program);
+    glCtx.deleteProgram(program);
+    throw new Error(error || "program link failed");
+  }
+  return program;
+}
+
+function initShaderRenderer() {
+  if (shaderState.ready || shaderState.failed) {
+    return shaderState.ready;
+  }
+
+  const glCtx = glCanvas.getContext("webgl", { preserveDrawingBuffer: true, antialias: true });
+  if (!glCtx) {
+    shaderState.failed = true;
+    return false;
+  }
+
+  const vertexSource = `
+    attribute vec2 aPosition;
+    void main() {
+      gl_Position = vec4(aPosition, 0.0, 1.0);
+    }
+  `;
+
+  const fragmentSource = `
+    precision highp float;
+    uniform vec2 uResolution;
+    uniform float uTime;
+    uniform float uSeed;
+    uniform float uDensity;
+    uniform float uSpeed;
+    uniform float uLine;
+    uniform int uMode;
+    uniform vec3 uPalette[5];
+
+    float hash(vec2 p) {
+      return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453);
+    }
+
+    float noise(vec2 p) {
+      vec2 i = floor(p);
+      vec2 f = fract(p);
+      vec2 u = f * f * (3.0 - 2.0 * f);
+      return mix(mix(hash(i), hash(i + vec2(1.0, 0.0)), u.x), mix(hash(i + vec2(0.0, 1.0)), hash(i + vec2(1.0, 1.0)), u.x), u.y);
+    }
+
+    vec3 palette(float t) {
+      t = clamp(t, 0.0, 1.0);
+      if (t < 0.25) return mix(uPalette[0], uPalette[1], t / 0.25);
+      if (t < 0.5) return mix(uPalette[1], uPalette[2], (t - 0.25) / 0.25);
+      if (t < 0.75) return mix(uPalette[2], uPalette[3], (t - 0.5) / 0.25);
+      return mix(uPalette[3], uPalette[4], (t - 0.75) / 0.25);
+    }
+
+    mat2 rot(float a) {
+      float c = cos(a);
+      float s = sin(a);
+      return mat2(c, -s, s, c);
+    }
+
+    float nebula(vec2 uv) {
+      vec2 p = uv * rot(uTime * 0.07);
+      float d = length(p);
+      float n = noise(p * (2.5 + uDensity * 1.2) + uSeed * 0.01);
+      float fog = sin((d * 10.0 - uTime * 1.2 * uSpeed) + n * 6.0);
+      float glow = exp(-d * (1.8 + uLine * 0.6));
+      return clamp(0.5 + 0.35 * fog + glow * 0.9, 0.0, 1.0);
+    }
+
+    float tunnel(vec2 uv) {
+      vec2 p = uv * rot(atan(uv.y, uv.x) * 0.15 + uTime * 0.03);
+      float r = max(length(p), 0.001);
+      float a = atan(p.y, p.x);
+      float lane = sin(14.0 / r - uTime * 2.0 * uSpeed + a * (5.0 + uDensity * 2.0));
+      float rip = noise(vec2(a * 2.5, 8.0 / r + uTime * 0.6));
+      float rim = smoothstep(0.9, 0.02, r);
+      return clamp(0.4 + lane * 0.25 + rip * 0.35 + rim * 0.3, 0.0, 1.0);
+    }
+
+    float metaball(vec2 uv) {
+      float t = uTime * 0.35 * uSpeed;
+      float sum = 0.0;
+      for (int i = 0; i < 6; i++) {
+        float fi = float(i);
+        vec2 c = vec2(sin(t * (0.9 + fi * 0.13) + fi * 1.9), cos(t * (1.1 + fi * 0.1) + fi * 1.4));
+        c *= 0.65;
+        float radius = 0.05 + 0.09 * (0.5 + 0.5 * sin(fi + uSeed * 0.05));
+        float d = length(uv - c);
+        sum += radius / max(d, 0.008);
+      }
+      float field = smoothstep(0.95, 1.75 + uDensity * 0.35, sum);
+      float veins = sin(sum * (2.4 + uLine) - t * 2.0);
+      return clamp(field * 0.75 + veins * 0.15 + 0.25, 0.0, 1.0);
+    }
+
+    void main() {
+      vec2 uv = (gl_FragCoord.xy * 2.0 - uResolution.xy) / min(uResolution.x, uResolution.y);
+      float v = 0.0;
+      if (uMode == 0) v = nebula(uv);
+      else if (uMode == 1) v = tunnel(uv);
+      else v = metaball(uv);
+
+      vec3 col = palette(v);
+      gl_FragColor = vec4(col, 1.0);
+    }
+  `;
+
+  try {
+    const program = createShaderProgram(glCtx, vertexSource, fragmentSource);
+    const buffer = glCtx.createBuffer();
+    glCtx.bindBuffer(glCtx.ARRAY_BUFFER, buffer);
+    glCtx.bufferData(
+      glCtx.ARRAY_BUFFER,
+      new Float32Array([-1, -1, 1, -1, -1, 1, -1, 1, 1, -1, 1, 1]),
+      glCtx.STATIC_DRAW
+    );
+
+    shaderState.gl = glCtx;
+    shaderState.program = program;
+    shaderState.buffer = buffer;
+    shaderState.position = glCtx.getAttribLocation(program, "aPosition");
+    shaderState.uniforms = {
+      resolution: glCtx.getUniformLocation(program, "uResolution"),
+      time: glCtx.getUniformLocation(program, "uTime"),
+      seed: glCtx.getUniformLocation(program, "uSeed"),
+      density: glCtx.getUniformLocation(program, "uDensity"),
+      speed: glCtx.getUniformLocation(program, "uSpeed"),
+      line: glCtx.getUniformLocation(program, "uLine"),
+      mode: glCtx.getUniformLocation(program, "uMode"),
+      palette0: glCtx.getUniformLocation(program, "uPalette[0]"),
+      palette1: glCtx.getUniformLocation(program, "uPalette[1]"),
+      palette2: glCtx.getUniformLocation(program, "uPalette[2]"),
+      palette3: glCtx.getUniformLocation(program, "uPalette[3]"),
+      palette4: glCtx.getUniformLocation(program, "uPalette[4]")
+    };
+    shaderState.ready = true;
+    shaderState.failed = false;
+    return true;
+  } catch {
+    shaderState.failed = true;
+    return false;
+  }
+}
+
+function shaderModeIndex(modeId) {
+  if (modeId === "tunnel3d") return 1;
+  if (modeId === "metaball3d") return 2;
+  return 0;
+}
+
+function drawShaderFrame() {
+  if (!initShaderRenderer()) {
+    commitChange(() => {
+      state.category = "classic";
+    }, { saveHistory: false });
+    return;
+  }
+
+  const glCtx = shaderState.gl;
+  glCtx.viewport(0, 0, glCanvas.width, glCanvas.height);
+  glCtx.useProgram(shaderState.program);
+  glCtx.bindBuffer(glCtx.ARRAY_BUFFER, shaderState.buffer);
+  glCtx.enableVertexAttribArray(shaderState.position);
+  glCtx.vertexAttribPointer(shaderState.position, 2, glCtx.FLOAT, false, 0, 0);
+
+  const p = palettes[state.paletteName];
+  const p0 = hexToRgb01(p[0]);
+  const p1 = hexToRgb01(p[1]);
+  const p2 = hexToRgb01(p[2]);
+  const p3 = hexToRgb01(p[3]);
+  const p4 = hexToRgb01(p[4]);
+
+  glCtx.uniform2f(shaderState.uniforms.resolution, glCanvas.width, glCanvas.height);
+  glCtx.uniform1f(shaderState.uniforms.time, state.frame * 0.016);
+  glCtx.uniform1f(shaderState.uniforms.seed, state.seed);
+  glCtx.uniform1f(shaderState.uniforms.density, state.params.density);
+  glCtx.uniform1f(shaderState.uniforms.speed, state.params.speed);
+  glCtx.uniform1f(shaderState.uniforms.line, state.params.lineWidth);
+  glCtx.uniform1i(shaderState.uniforms.mode, shaderModeIndex(state.shaderMode));
+  glCtx.uniform3f(shaderState.uniforms.palette0, p0[0], p0[1], p0[2]);
+  glCtx.uniform3f(shaderState.uniforms.palette1, p1[0], p1[1], p1[2]);
+  glCtx.uniform3f(shaderState.uniforms.palette2, p2[0], p2[1], p2[2]);
+  glCtx.uniform3f(shaderState.uniforms.palette3, p3[0], p3[1], p3[2]);
+  glCtx.uniform3f(shaderState.uniforms.palette4, p4[0], p4[1], p4[2]);
+  glCtx.drawArrays(glCtx.TRIANGLES, 0, 6);
+}
+
 function resize() {
   const frame = canvas.parentElement.getBoundingClientRect();
   width = Math.max(320, Math.floor(frame.width));
@@ -792,28 +1227,54 @@ function resize() {
   dpr = Math.max(1, Math.min(2, window.devicePixelRatio || 1));
   canvas.width = Math.floor(width * dpr);
   canvas.height = Math.floor(height * dpr);
-  ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
-  regenerate();
-}
+  glCanvas.width = Math.floor(width * dpr);
+  glCanvas.height = Math.floor(height * dpr);
+  comboLayerA.width = Math.floor(width * dpr);
+  comboLayerA.height = Math.floor(height * dpr);
+  comboLayerB.width = Math.floor(width * dpr);
+  comboLayerB.height = Math.floor(height * dpr);
 
-function getMode() {
-  return modeMap.get(state.mode) || modeDefs[0];
+  baseCtx2d.setTransform(dpr, 0, 0, dpr, 0, 0);
+  comboCtxA.setTransform(dpr, 0, 0, dpr, 0, 0);
+  comboCtxB.setTransform(dpr, 0, 0, dpr, 0, 0);
+
+  if (shaderState.ready) {
+    shaderState.gl.viewport(0, 0, glCanvas.width, glCanvas.height);
+  }
+
+  regenerate();
 }
 
 function regenerate() {
   state.frame = 0;
   state.rand = mulberry32(state.seed);
   applyPaletteToUI();
-  ctx.setLineDash([]);
-  ctx.fillStyle = paletteAt(0);
-  ctx.fillRect(0, 0, width, height);
-  getMode().build(state.rand);
+  baseCtx2d.setLineDash([]);
+  baseCtx2d.fillStyle = paletteAt(0);
+  baseCtx2d.fillRect(0, 0, width, height);
+
+  if (state.category === "classic") {
+    ctx = baseCtx2d;
+    getMode(state.mode).build(state.rand);
+  } else if (state.category === "combo") {
+    regenerateComboData();
+  } else {
+    initShaderRenderer();
+    drawShaderFrame();
+  }
 }
 
 function tick() {
   if (state.running) {
     state.frame += 1;
-    getMode().draw();
+    if (state.category === "classic") {
+      ctx = baseCtx2d;
+      getMode(state.mode).draw();
+    } else if (state.category === "combo") {
+      drawComboFrame();
+    } else {
+      drawShaderFrame();
+    }
   }
   animationId = requestAnimationFrame(tick);
 }
@@ -1707,7 +2168,9 @@ function flashButton(button, activeText, defaultText) {
 }
 
 function randomizeSelected() {
-  const selected = [randMode, randPalette, randSeed, randDensity, randSpeed, randLineWidth].some((item) => item.checked);
+  const selected = [randCategory, randMode, randBlend, randPalette, randSeed, randDensity, randSpeed, randLineWidth].some(
+    (item) => item.checked
+  );
 
   if (!selected) {
     flashButton(randomBtn, "Select a random attr", "Randomize Selected");
@@ -1715,9 +2178,26 @@ function randomizeSelected() {
   }
 
   commitChange(() => {
+    if (randCategory.checked) {
+      state.category = randomChoice(["classic", "shader3d", "combo"]);
+    }
+
     if (randMode.checked) {
-      const ids = modeDefs.map((item) => item.id);
-      state.mode = randomChoice(ids);
+      if (state.category === "classic") {
+        const ids = modeDefs.map((item) => item.id);
+        state.mode = randomChoice(ids);
+      } else if (state.category === "shader3d") {
+        const ids = shaderModeDefs.map((item) => item.id);
+        state.shaderMode = randomChoice(ids);
+      } else {
+        const ids = modeDefs.map((item) => item.id);
+        state.combo.modeA = randomChoice(ids);
+        state.combo.modeB = randomChoice(ids);
+      }
+    }
+
+    if (randBlend.checked && state.category === "combo") {
+      state.combo.blend = randomChoice(blendDefs.map((item) => item.id));
     }
 
     if (randPalette.checked) {
@@ -1743,10 +2223,40 @@ function randomizeSelected() {
   });
 }
 
+categorySelect.addEventListener("change", () => {
+  commitChange(() => {
+    state.category = categorySelect.value;
+  });
+});
+
 modeSelect.addEventListener("change", () => {
   commitChange(() => {
     state.mode = modeSelect.value;
   });
+});
+
+shaderModeSelect.addEventListener("change", () => {
+  commitChange(() => {
+    state.shaderMode = shaderModeSelect.value;
+  });
+});
+
+comboModeASelect.addEventListener("change", () => {
+  commitChange(() => {
+    state.combo.modeA = comboModeASelect.value;
+  });
+});
+
+comboModeBSelect.addEventListener("change", () => {
+  commitChange(() => {
+    state.combo.modeB = comboModeBSelect.value;
+  });
+});
+
+comboBlendSelect.addEventListener("change", () => {
+  commitChange(() => {
+    state.combo.blend = comboBlendSelect.value;
+  }, { regenerate: false });
 });
 
 paletteSelect.addEventListener("change", () => {
@@ -1819,8 +2329,10 @@ pauseBtn.addEventListener("click", () => {
 
 downloadBtn.addEventListener("click", () => {
   const link = document.createElement("a");
-  link.download = `generative-art-${state.mode}-${state.seed}.png`;
-  link.href = canvas.toDataURL("image/png");
+  const modeLabel = state.category === "classic" ? state.mode : state.category === "shader3d" ? state.shaderMode : "combo";
+  const activeCanvas = state.category === "shader3d" ? glCanvas : canvas;
+  link.download = `generative-art-${modeLabel}-${state.seed}.png`;
+  link.href = activeCanvas.toDataURL("image/png");
   link.click();
 });
 
@@ -1831,6 +2343,7 @@ copyLinkBtn.addEventListener("click", () => {
 window.addEventListener("resize", resize);
 
 syncUrlFromState();
+setCanvasVisibility();
 resize();
 cancelAnimationFrame(animationId);
 tick();
