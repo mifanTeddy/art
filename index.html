@@ -1,0 +1,68 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Generative Garden</title>
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <div class="atmosphere atmosphere-a"></div>
+  <div class="atmosphere atmosphere-b"></div>
+
+  <main class="app-shell">
+    <section class="control-panel">
+      <h1>Generative Garden</h1>
+      <p>Local generative art playground. Pick a style and let it evolve.</p>
+
+      <div class="controls">
+        <label for="modeSelect">Mode</label>
+        <select id="modeSelect"></select>
+
+        <label for="paletteSelect">Palette</label>
+        <select id="paletteSelect"></select>
+
+        <label for="seedInput">Seed</label>
+        <input id="seedInput" type="number" min="1" max="9999999" step="1">
+
+        <div class="range-block">
+          <label for="densityRange">Density <span id="densityValue" class="value-pill">1.0x</span></label>
+          <input id="densityRange" type="range" min="0.4" max="2.4" step="0.1" value="1">
+
+          <label for="speedRange">Speed <span id="speedValue" class="value-pill">1.0x</span></label>
+          <input id="speedRange" type="range" min="0.3" max="2.5" step="0.1" value="1">
+
+          <label for="lineWidthRange">Line Width <span id="lineWidthValue" class="value-pill">1.0x</span></label>
+          <input id="lineWidthRange" type="range" min="0.4" max="2.5" step="0.1" value="1">
+        </div>
+
+        <section class="random-options">
+          <p>Random Attributes</p>
+          <label class="check-item"><input id="randMode" type="checkbox" checked> Mode</label>
+          <label class="check-item"><input id="randPalette" type="checkbox" checked> Palette</label>
+          <label class="check-item"><input id="randSeed" type="checkbox" checked> Seed</label>
+          <label class="check-item"><input id="randDensity" type="checkbox" checked> Density</label>
+          <label class="check-item"><input id="randSpeed" type="checkbox" checked> Speed</label>
+          <label class="check-item"><input id="randLineWidth" type="checkbox" checked> Line Width</label>
+        </section>
+      </div>
+
+      <div class="actions">
+        <button id="generateBtn" type="button">Regenerate</button>
+        <button id="randomBtn" type="button">Randomize Selected</button>
+        <button id="undoBtn" type="button">Undo Previous</button>
+        <button id="pauseBtn" type="button">Pause</button>
+        <button id="downloadBtn" type="button">Export PNG</button>
+        <button id="copyLinkBtn" type="button">Copy Share URL</button>
+      </div>
+      <p id="historyStatus" class="history-status">History 0/30</p>
+    </section>
+
+    <section class="canvas-frame">
+      <canvas id="artCanvas" aria-label="Generative art canvas"></canvas>
+    </section>
+  </main>
+
+  <script src="app.js"></script>
+</body>
+</html>
