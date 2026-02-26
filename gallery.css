@@ -1,0 +1,115 @@
+:root {
+  --bg-cream: #f8f3e9;
+  --bg-sand: #e8dcc5;
+  --ink: #102132;
+  --accent: #f06449;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  min-height: 100vh;
+  font-family: "Avenir Next", "Gill Sans", "Trebuchet MS", sans-serif;
+  color: var(--ink);
+  background:
+    radial-gradient(circle at 12% 8%, #fff8e6 0%, transparent 40%),
+    linear-gradient(130deg, var(--bg-cream) 0%, var(--bg-sand) 100%);
+}
+
+.gallery-shell {
+  max-width: 1200px;
+  margin: 0 auto;
+  padding: 1.2rem;
+}
+
+.gallery-header {
+  margin-bottom: 1rem;
+}
+
+.gallery-header h1 {
+  margin: 0;
+  font-size: clamp(1.6rem, 3.2vw, 2.4rem);
+  font-family: "Rockwell", "Avenir Next Condensed", serif;
+}
+
+.gallery-header p {
+  margin: 0.45rem 0 0.75rem;
+  opacity: 0.82;
+}
+
+.back-link {
+  display: inline-block;
+  padding: 0.5rem 0.75rem;
+  border-radius: 10px;
+  text-decoration: none;
+  color: var(--ink);
+  border: 1px solid rgba(16, 33, 50, 0.22);
+  background: rgba(255, 255, 255, 0.7);
+}
+
+.gallery-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
+  gap: 0.9rem;
+}
+
+.card {
+  border: 1px solid rgba(16, 33, 50, 0.12);
+  border-radius: 16px;
+  overflow: hidden;
+  background: rgba(255, 255, 255, 0.78);
+}
+
+.thumb {
+  width: 100%;
+  aspect-ratio: 16 / 10;
+  object-fit: cover;
+  display: block;
+  background: #ddd;
+}
+
+.card-body {
+  padding: 0.7rem;
+}
+
+.card-title {
+  margin: 0;
+  font-weight: 700;
+}
+
+.card-meta {
+  margin: 0.3rem 0 0.6rem;
+  font-size: 0.8rem;
+  opacity: 0.7;
+  font-family: "Menlo", "Consolas", monospace;
+}
+
+.card-actions {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 0.4rem;
+}
+
+button {
+  border: 1px solid rgba(16, 33, 50, 0.2);
+  border-radius: 10px;
+  background: rgba(255, 255, 255, 0.84);
+  color: var(--ink);
+  cursor: pointer;
+  padding: 0.45rem 0.6rem;
+  font-weight: 600;
+}
+
+button:hover {
+  border-color: var(--accent);
+}
+
+.empty {
+  border: 1px dashed rgba(16, 33, 50, 0.28);
+  border-radius: 16px;
+  padding: 1rem;
+  background: rgba(255, 255, 255, 0.6);
+}

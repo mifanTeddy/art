@@ -97,6 +97,15 @@ body {
   gap: 0.35rem;
 }
 
+.combo-layer {
+  display: grid;
+  gap: 0.32rem;
+  padding: 0.5rem;
+  border: 1px solid rgba(16, 33, 50, 0.1);
+  border-radius: 10px;
+  background: rgba(255, 255, 255, 0.42);
+}
+
 .range-block {
   margin-top: 0.5rem;
   display: grid;
@@ -126,7 +135,8 @@ input[type="range"] {
 }
 
 .preset-options,
-.record-options {
+.record-options,
+.postfx-options {
   margin-top: 0.8rem;
   padding: 0.6rem;
   border-radius: 14px;
@@ -146,7 +156,8 @@ input[type="range"] {
 }
 
 .preset-options p,
-.record-options p {
+.record-options p,
+.postfx-options p {
   margin: 0 0 0.25rem;
   font-size: 0.8rem;
   letter-spacing: 0.08em;
@@ -266,6 +277,10 @@ button:hover {
 
 #glCanvas {
   display: none;
+}
+
+#fxCanvas {
+  pointer-events: none;
 }
 
 @keyframes panel-in {

@@ -18,6 +18,7 @@ const deletePresetBtn = document.getElementById("deletePresetBtn");
 const recordWebmBtn = document.getElementById("recordWebmBtn");
 const exportGifBtn = document.getElementById("exportGifBtn");
 const recordStatus = document.getElementById("recordStatus");
+const openGalleryBtn = document.getElementById("openGalleryBtn");
 
 const densityRange = document.getElementById("densityRange");
 const speedRange = document.getElementById("speedRange");
@@ -32,6 +33,16 @@ const randSeed = document.getElementById("randSeed");
 const randDensity = document.getElementById("randDensity");
 const randSpeed = document.getElementById("randSpeed");
 const randLineWidth = document.getElementById("randLineWidth");
+
+const fxEnabled = document.getElementById("fxEnabled");
+const fxBloomRange = document.getElementById("fxBloomRange");
+const fxChromaRange = document.getElementById("fxChromaRange");
+const fxGrainRange = document.getElementById("fxGrainRange");
+const fxVignetteRange = document.getElementById("fxVignetteRange");
+const fxBloomValue = document.getElementById("fxBloomValue");
+const fxChromaValue = document.getElementById("fxChromaValue");
+const fxGrainValue = document.getElementById("fxGrainValue");
+const fxVignetteValue = document.getElementById("fxVignetteValue");
 
 const HISTORY_LIMIT = 30;
 const PRESET_LIMIT = 40;
@@ -72,6 +83,13 @@ const state = {
     density: 1,
     speed: 1,
     lineWidth: 1
+  },
+  post: {
+    enabled: true,
+    bloom: 0.4,
+    chroma: 0.2,
+    grain: 0.2,
+    vignette: 0.3
   },
   frame: 0,
   data: null,
@@ -501,21 +519,40 @@ const classicGroup = document.getElementById("classicGroup");
 const shaderGroup = document.getElementById("shaderGroup");
 const comboGroup = document.getElementById("comboGroup");
 const shaderModeSelect = document.getElementById("shaderModeSelect");
-const comboModeASelect = document.getElementById("comboModeASelect");
-const comboModeBSelect = document.getElementById("comboModeBSelect");
-const comboBlendSelect = document.getElementById("comboBlendSelect");
+const comboLayerCountSelect = document.getElementById("comboLayerCountSelect");
+const comboLayer1 = document.getElementById("comboLayer1");
+const comboLayer2 = document.getElementById("comboLayer2");
+const comboLayer3 = document.getElementById("comboLayer3");
+const comboLayer4 = document.getElementById("comboLayer4");
+const comboMode1Select = document.getElementById("comboMode1Select");
+const comboMode2Select = document.getElementById("comboMode2Select");
+const comboMode3Select = document.getElementById("comboMode3Select");
+const comboMode4Select = document.getElementById("comboMode4Select");
+const comboBlend2Select = document.getElementById("comboBlend2Select");
+const comboBlend3Select = document.getElementById("comboBlend3Select");
+const comboBlend4Select = document.getElementById("comboBlend4Select");
 
 const randCategory = document.getElementById("randCategory");
 const randBlend = document.getElementById("randBlend");
 
 const glCanvas = document.getElementById("glCanvas");
+const fxCanvas = document.getElementById("fxCanvas");
 const baseCtx2d = canvas.getContext("2d");
+const fxCtx = fxCanvas.getContext("2d", { willReadFrequently: true });
 let ctx = baseCtx2d;
 
-const comboLayerA = document.createElement("canvas");
-const comboLayerB = document.createElement("canvas");
-const comboCtxA = comboLayerA.getContext("2d");
-const comboCtxB = comboLayerB.getContext("2d");
+const comboLayers = Array.from({ length: 4 }, () => {
+  const layerCanvas = document.createElement("canvas");
+  return {
+    canvas: layerCanvas,
+    ctx: layerCanvas.getContext("2d", { willReadFrequently: true })
+  };
+});
+
+const captureCanvas = document.createElement("canvas");
+const captureCtx = captureCanvas.getContext("2d", { willReadFrequently: true });
+const grainCanvas = document.createElement("canvas");
+const grainCtx = grainCanvas.getContext("2d", { willReadFrequently: true });
 
 const shaderState = {
   gl: null,
@@ -534,18 +571,30 @@ let animationId = 0;
 
 URL_KEYS.category = "c";
 URL_KEYS.shaderMode = "sm";
-URL_KEYS.comboA = "a";
-URL_KEYS.comboB = "b";
-URL_KEYS.comboBlend = "bm";
+URL_KEYS.comboLayerCount = "cl";
+URL_KEYS.comboMode1 = "a";
+URL_KEYS.comboMode2 = "b";
+URL_KEYS.comboMode3 = "c3";
+URL_KEYS.comboMode4 = "c4";
+URL_KEYS.comboBlend2 = "bm";
+URL_KEYS.comboBlend3 = "b3";
+URL_KEYS.comboBlend4 = "b4";
+URL_KEYS.fxEnabled = "fxe";
+URL_KEYS.fxBloom = "fb";
+URL_KEYS.fxChroma = "fc";
+URL_KEYS.fxGrain = "fg";
+URL_KEYS.fxVignette = "fv";
 
 state.category = "classic";
 state.shaderMode = "nebula3d";
 state.combo = {
-  modeA: "flow",
-  modeB: "aurora",
-  blend: "screen",
-  dataA: null,
-  dataB: null
+  layerCount: 2,
+  layers: [
+    { mode: "flow", blend: "source-over", data: null },
+    { mode: "aurora", blend: "screen", data: null },
+    { mode: "rings", blend: "lighter", data: null },
+    { mode: "mosaic", blend: "multiply", data: null }
+  ]
 };
 
 const presetStore = {
@@ -566,15 +615,13 @@ for (const mode of modeDefs) {
   option.textContent = mode.label;
   modeSelect.appendChild(option);
 
-  const optionA = document.createElement("option");
-  optionA.value = mode.id;
-  optionA.textContent = mode.label;
-  comboModeASelect.appendChild(optionA);
-
-  const optionB = document.createElement("option");
-  optionB.value = mode.id;
-  optionB.textContent = mode.label;
-  comboModeBSelect.appendChild(optionB);
+  const comboSelects = [comboMode1Select, comboMode2Select, comboMode3Select, comboMode4Select];
+  for (const select of comboSelects) {
+    const comboOption = document.createElement("option");
+    comboOption.value = mode.id;
+    comboOption.textContent = mode.label;
+    select.appendChild(comboOption);
+  }
 }
 
 for (const mode of shaderModeDefs) {
@@ -585,10 +632,13 @@ for (const mode of shaderModeDefs) {
 }
 
 for (const blend of blendDefs) {
-  const option = document.createElement("option");
-  option.value = blend.id;
-  option.textContent = blend.label;
-  comboBlendSelect.appendChild(option);
+  const blendSelects = [comboBlend2Select, comboBlend3Select, comboBlend4Select];
+  for (const select of blendSelects) {
+    const option = document.createElement("option");
+    option.value = blend.id;
+    option.textContent = blend.label;
+    select.appendChild(option);
+  }
 }
 
 for (const name of Object.keys(palettes)) {
@@ -749,22 +799,62 @@ function setCanvasVisibility() {
   const shaderActive = state.category === "shader3d";
   canvas.style.display = shaderActive ? "none" : "block";
   glCanvas.style.display = shaderActive ? "block" : "none";
+  fxCanvas.style.display = "block";
 }
 
 function updateCategoryUI() {
   classicGroup.style.display = state.category === "classic" ? "grid" : "none";
   shaderGroup.style.display = state.category === "shader3d" ? "grid" : "none";
   comboGroup.style.display = state.category === "combo" ? "grid" : "none";
+  updateComboLayerUI();
   setCanvasVisibility();
+}
+
+function updateComboLayerUI() {
+  const count = state.combo.layerCount;
+  comboLayer1.style.display = "grid";
+  comboLayer2.style.display = count >= 2 ? "grid" : "none";
+  comboLayer3.style.display = count >= 3 ? "grid" : "none";
+  comboLayer4.style.display = count >= 4 ? "grid" : "none";
+}
+
+function clamp01(value) {
+  return clamp(value, 0, 1);
+}
+
+function formatFx(value) {
+  return Number(value).toFixed(2);
 }
 
 function sanitizeState() {
   if (!["classic", "shader3d", "combo"].includes(state.category)) state.category = "classic";
   if (!modeMap.has(state.mode)) state.mode = modeDefs[0].id;
   if (!shaderModeMap.has(state.shaderMode)) state.shaderMode = shaderModeDefs[0].id;
-  if (!modeMap.has(state.combo.modeA)) state.combo.modeA = modeDefs[0].id;
-  if (!modeMap.has(state.combo.modeB)) state.combo.modeB = modeDefs[1].id;
-  if (!blendMap.has(state.combo.blend)) state.combo.blend = blendDefs[0].id;
+  state.combo.layerCount = clamp(parseIntSafe(state.combo.layerCount, 2), 2, 4);
+
+  if (!Array.isArray(state.combo.layers) || state.combo.layers.length < 4) {
+    const defaults = [
+      { mode: modeDefs[0].id, blend: "source-over", data: null },
+      { mode: modeDefs[1].id, blend: "screen", data: null },
+      { mode: modeDefs[2].id, blend: "lighter", data: null },
+      { mode: modeDefs[3].id, blend: "multiply", data: null }
+    ];
+    state.combo.layers = defaults;
+  }
+
+  for (let i = 0; i < 4; i += 1) {
+    const layer = state.combo.layers[i];
+    if (!modeMap.has(layer.mode)) {
+      layer.mode = modeDefs[i % modeDefs.length].id;
+    }
+
+    if (i === 0) {
+      layer.blend = "source-over";
+    } else if (!blendMap.has(layer.blend) || layer.blend === "source-over") {
+      layer.blend = blendDefs[0].id;
+    }
+  }
+
   if (!palettes[state.paletteName]) state.paletteName = Object.keys(palettes)[0];
 
   state.seed = clamp(Math.floor(parseIntSafe(state.seed, 1)), 1, 9999999);
@@ -774,6 +864,12 @@ function sanitizeState() {
     const raw = parseNum(state.params[key], 1);
     state.params[key] = clamp(quantize(raw, rule.step), rule.min, rule.max);
   }
+
+  state.post.enabled = Boolean(state.post.enabled);
+  state.post.bloom = clamp01(parseNum(state.post.bloom, 0.4));
+  state.post.chroma = clamp01(parseNum(state.post.chroma, 0.2));
+  state.post.grain = clamp01(parseNum(state.post.grain, 0.2));
+  state.post.vignette = clamp01(parseNum(state.post.vignette, 0.3));
 }
 
 function snapshotState() {
@@ -782,9 +878,11 @@ function snapshotState() {
     mode: state.mode,
     shaderMode: state.shaderMode,
     combo: {
-      modeA: state.combo.modeA,
-      modeB: state.combo.modeB,
-      blend: state.combo.blend
+      layerCount: state.combo.layerCount,
+      layers: state.combo.layers.map((layer) => ({
+        mode: layer.mode,
+        blend: layer.blend
+      }))
     },
     paletteName: state.paletteName,
     seed: state.seed,
@@ -792,23 +890,40 @@ function snapshotState() {
       density: state.params.density,
       speed: state.params.speed,
       lineWidth: state.params.lineWidth
+    },
+    post: {
+      enabled: state.post.enabled,
+      bloom: state.post.bloom,
+      chroma: state.post.chroma,
+      grain: state.post.grain,
+      vignette: state.post.vignette
     }
   };
 }
 
 function snapshotsEqual(a, b) {
+  const layersEqual =
+    a.combo.layerCount === b.combo.layerCount &&
+    a.combo.layers.length === b.combo.layers.length &&
+    a.combo.layers.every(
+      (layer, i) => layer.mode === b.combo.layers[i].mode && layer.blend === b.combo.layers[i].blend
+    );
+
   return (
     a.category === b.category &&
     a.mode === b.mode &&
     a.shaderMode === b.shaderMode &&
-    a.combo.modeA === b.combo.modeA &&
-    a.combo.modeB === b.combo.modeB &&
-    a.combo.blend === b.combo.blend &&
+    layersEqual &&
     a.paletteName === b.paletteName &&
     a.seed === b.seed &&
     a.params.density === b.params.density &&
     a.params.speed === b.params.speed &&
-    a.params.lineWidth === b.params.lineWidth
+    a.params.lineWidth === b.params.lineWidth &&
+    a.post.enabled === b.post.enabled &&
+    a.post.bloom === b.post.bloom &&
+    a.post.chroma === b.post.chroma &&
+    a.post.grain === b.post.grain &&
+    a.post.vignette === b.post.vignette
   );
 }
 
@@ -818,9 +933,11 @@ function pushHistory(snapshot) {
     mode: snapshot.mode,
     shaderMode: snapshot.shaderMode,
     combo: {
-      modeA: snapshot.combo.modeA,
-      modeB: snapshot.combo.modeB,
-      blend: snapshot.combo.blend
+      layerCount: snapshot.combo.layerCount,
+      layers: snapshot.combo.layers.map((layer) => ({
+        mode: layer.mode,
+        blend: layer.blend
+      }))
     },
     paletteName: snapshot.paletteName,
     seed: snapshot.seed,
@@ -828,6 +945,13 @@ function pushHistory(snapshot) {
       density: snapshot.params.density,
       speed: snapshot.params.speed,
       lineWidth: snapshot.params.lineWidth
+    },
+    post: {
+      enabled: snapshot.post.enabled,
+      bloom: snapshot.post.bloom,
+      chroma: snapshot.post.chroma,
+      grain: snapshot.post.grain,
+      vignette: snapshot.post.vignette
     }
   };
 
@@ -925,6 +1049,7 @@ function saveCurrentPreset() {
     id: existingIndex >= 0 ? presetStore.items[existingIndex].id : `${Date.now()}-${Math.floor(Math.random() * 100000)}`,
     name,
     snapshot: snapshotState(),
+    thumbnail: captureThumbnailDataUrl(),
     updatedAt: Date.now()
   };
 
@@ -969,14 +1094,25 @@ function setStateFromSnapshot(snapshot) {
   state.category = snapshot.category || "classic";
   state.mode = snapshot.mode || state.mode;
   state.shaderMode = snapshot.shaderMode || state.shaderMode;
-  state.combo.modeA = snapshot.combo?.modeA || state.combo.modeA;
-  state.combo.modeB = snapshot.combo?.modeB || state.combo.modeB;
-  state.combo.blend = snapshot.combo?.blend || state.combo.blend;
+  if (snapshot.combo?.layerCount) {
+    state.combo.layerCount = snapshot.combo.layerCount;
+  }
+  if (Array.isArray(snapshot.combo?.layers)) {
+    for (let i = 0; i < Math.min(4, snapshot.combo.layers.length); i += 1) {
+      state.combo.layers[i].mode = snapshot.combo.layers[i].mode || state.combo.layers[i].mode;
+      state.combo.layers[i].blend = snapshot.combo.layers[i].blend || state.combo.layers[i].blend;
+    }
+  }
   state.paletteName = snapshot.paletteName || state.paletteName;
   state.seed = snapshot.seed || state.seed;
   state.params.density = snapshot.params?.density ?? state.params.density;
   state.params.speed = snapshot.params?.speed ?? state.params.speed;
   state.params.lineWidth = snapshot.params?.lineWidth ?? state.params.lineWidth;
+  state.post.enabled = snapshot.post?.enabled ?? state.post.enabled;
+  state.post.bloom = snapshot.post?.bloom ?? state.post.bloom;
+  state.post.chroma = snapshot.post?.chroma ?? state.post.chroma;
+  state.post.grain = snapshot.post?.grain ?? state.post.grain;
+  state.post.vignette = snapshot.post?.vignette ?? state.post.vignette;
   sanitizeState();
 }
 
@@ -984,18 +1120,32 @@ function syncControlsFromState() {
   categorySelect.value = state.category;
   modeSelect.value = state.mode;
   shaderModeSelect.value = state.shaderMode;
-  comboModeASelect.value = state.combo.modeA;
-  comboModeBSelect.value = state.combo.modeB;
-  comboBlendSelect.value = state.combo.blend;
+  comboLayerCountSelect.value = String(state.combo.layerCount);
+  comboMode1Select.value = state.combo.layers[0].mode;
+  comboMode2Select.value = state.combo.layers[1].mode;
+  comboMode3Select.value = state.combo.layers[2].mode;
+  comboMode4Select.value = state.combo.layers[3].mode;
+  comboBlend2Select.value = state.combo.layers[1].blend;
+  comboBlend3Select.value = state.combo.layers[2].blend;
+  comboBlend4Select.value = state.combo.layers[3].blend;
   paletteSelect.value = state.paletteName;
   seedInput.value = String(state.seed);
   densityRange.value = String(state.params.density);
   speedRange.value = String(state.params.speed);
   lineWidthRange.value = String(state.params.lineWidth);
+  fxEnabled.checked = state.post.enabled;
+  fxBloomRange.value = String(state.post.bloom);
+  fxChromaRange.value = String(state.post.chroma);
+  fxGrainRange.value = String(state.post.grain);
+  fxVignetteRange.value = String(state.post.vignette);
 
   densityValue.textContent = formatMult(state.params.density);
   speedValue.textContent = formatMult(state.params.speed);
   lineWidthValue.textContent = formatMult(state.params.lineWidth);
+  fxBloomValue.textContent = formatFx(state.post.bloom);
+  fxChromaValue.textContent = formatFx(state.post.chroma);
+  fxGrainValue.textContent = formatFx(state.post.grain);
+  fxVignetteValue.textContent = formatFx(state.post.vignette);
   updateCategoryUI();
 }
 
@@ -1004,14 +1154,24 @@ function syncUrlFromState() {
   url.searchParams.set(URL_KEYS.category, state.category);
   url.searchParams.set(URL_KEYS.mode, state.mode);
   url.searchParams.set(URL_KEYS.shaderMode, state.shaderMode);
-  url.searchParams.set(URL_KEYS.comboA, state.combo.modeA);
-  url.searchParams.set(URL_KEYS.comboB, state.combo.modeB);
-  url.searchParams.set(URL_KEYS.comboBlend, state.combo.blend);
+  url.searchParams.set(URL_KEYS.comboLayerCount, String(state.combo.layerCount));
+  url.searchParams.set(URL_KEYS.comboMode1, state.combo.layers[0].mode);
+  url.searchParams.set(URL_KEYS.comboMode2, state.combo.layers[1].mode);
+  url.searchParams.set(URL_KEYS.comboMode3, state.combo.layers[2].mode);
+  url.searchParams.set(URL_KEYS.comboMode4, state.combo.layers[3].mode);
+  url.searchParams.set(URL_KEYS.comboBlend2, state.combo.layers[1].blend);
+  url.searchParams.set(URL_KEYS.comboBlend3, state.combo.layers[2].blend);
+  url.searchParams.set(URL_KEYS.comboBlend4, state.combo.layers[3].blend);
   url.searchParams.set(URL_KEYS.palette, state.paletteName);
   url.searchParams.set(URL_KEYS.seed, String(state.seed));
   url.searchParams.set(URL_KEYS.density, trimFloat(state.params.density));
   url.searchParams.set(URL_KEYS.speed, trimFloat(state.params.speed));
   url.searchParams.set(URL_KEYS.lineWidth, trimFloat(state.params.lineWidth));
+  url.searchParams.set(URL_KEYS.fxEnabled, state.post.enabled ? "1" : "0");
+  url.searchParams.set(URL_KEYS.fxBloom, trimFloat(state.post.bloom));
+  url.searchParams.set(URL_KEYS.fxChroma, trimFloat(state.post.chroma));
+  url.searchParams.set(URL_KEYS.fxGrain, trimFloat(state.post.grain));
+  url.searchParams.set(URL_KEYS.fxVignette, trimFloat(state.post.vignette));
   window.history.replaceState(null, "", url);
 }
 
@@ -1020,14 +1180,24 @@ function applyStateFromUrl() {
   const categoryParam = url.searchParams.get(URL_KEYS.category);
   const modeParam = url.searchParams.get(URL_KEYS.mode);
   const shaderModeParam = url.searchParams.get(URL_KEYS.shaderMode);
-  const comboAParam = url.searchParams.get(URL_KEYS.comboA);
-  const comboBParam = url.searchParams.get(URL_KEYS.comboB);
-  const comboBlendParam = url.searchParams.get(URL_KEYS.comboBlend);
+  const comboLayerCountParam = url.searchParams.get(URL_KEYS.comboLayerCount);
+  const comboMode1Param = url.searchParams.get(URL_KEYS.comboMode1);
+  const comboMode2Param = url.searchParams.get(URL_KEYS.comboMode2);
+  const comboMode3Param = url.searchParams.get(URL_KEYS.comboMode3);
+  const comboMode4Param = url.searchParams.get(URL_KEYS.comboMode4);
+  const comboBlend2Param = url.searchParams.get(URL_KEYS.comboBlend2);
+  const comboBlend3Param = url.searchParams.get(URL_KEYS.comboBlend3);
+  const comboBlend4Param = url.searchParams.get(URL_KEYS.comboBlend4);
   const paletteParam = url.searchParams.get(URL_KEYS.palette);
   const seedParam = url.searchParams.get(URL_KEYS.seed);
   const densityParam = url.searchParams.get(URL_KEYS.density);
   const speedParam = url.searchParams.get(URL_KEYS.speed);
   const lineWidthParam = url.searchParams.get(URL_KEYS.lineWidth);
+  const fxEnabledParam = url.searchParams.get(URL_KEYS.fxEnabled);
+  const fxBloomParam = url.searchParams.get(URL_KEYS.fxBloom);
+  const fxChromaParam = url.searchParams.get(URL_KEYS.fxChroma);
+  const fxGrainParam = url.searchParams.get(URL_KEYS.fxGrain);
+  const fxVignetteParam = url.searchParams.get(URL_KEYS.fxVignette);
 
   if (categoryParam) {
     state.category = categoryParam;
@@ -1041,16 +1211,36 @@ function applyStateFromUrl() {
     state.shaderMode = shaderModeParam;
   }
 
-  if (comboAParam && modeMap.has(comboAParam)) {
-    state.combo.modeA = comboAParam;
+  if (comboLayerCountParam) {
+    state.combo.layerCount = parseIntSafe(comboLayerCountParam, state.combo.layerCount);
   }
 
-  if (comboBParam && modeMap.has(comboBParam)) {
-    state.combo.modeB = comboBParam;
+  if (comboMode1Param && modeMap.has(comboMode1Param)) {
+    state.combo.layers[0].mode = comboMode1Param;
   }
 
-  if (comboBlendParam && blendMap.has(comboBlendParam)) {
-    state.combo.blend = comboBlendParam;
+  if (comboMode2Param && modeMap.has(comboMode2Param)) {
+    state.combo.layers[1].mode = comboMode2Param;
+  }
+
+  if (comboMode3Param && modeMap.has(comboMode3Param)) {
+    state.combo.layers[2].mode = comboMode3Param;
+  }
+
+  if (comboMode4Param && modeMap.has(comboMode4Param)) {
+    state.combo.layers[3].mode = comboMode4Param;
+  }
+
+  if (comboBlend2Param && blendMap.has(comboBlend2Param)) {
+    state.combo.layers[1].blend = comboBlend2Param;
+  }
+
+  if (comboBlend3Param && blendMap.has(comboBlend3Param)) {
+    state.combo.layers[2].blend = comboBlend3Param;
+  }
+
+  if (comboBlend4Param && blendMap.has(comboBlend4Param)) {
+    state.combo.layers[3].blend = comboBlend4Param;
   }
 
   if (paletteParam && palettes[paletteParam]) {
@@ -1071,6 +1261,26 @@ function applyStateFromUrl() {
 
   if (lineWidthParam) {
     state.params.lineWidth = parseNum(lineWidthParam, state.params.lineWidth);
+  }
+
+  if (fxEnabledParam !== null) {
+    state.post.enabled = fxEnabledParam === "1";
+  }
+
+  if (fxBloomParam !== null) {
+    state.post.bloom = parseNum(fxBloomParam, state.post.bloom);
+  }
+
+  if (fxChromaParam !== null) {
+    state.post.chroma = parseNum(fxChromaParam, state.post.chroma);
+  }
+
+  if (fxGrainParam !== null) {
+    state.post.grain = parseNum(fxGrainParam, state.post.grain);
+  }
+
+  if (fxVignetteParam !== null) {
+    state.post.vignette = parseNum(fxVignetteParam, state.post.vignette);
   }
 }
 
@@ -1093,6 +1303,9 @@ function commitChange(mutator, options = {}) {
 
   if (options.regenerate !== false) {
     regenerate();
+  } else {
+    drawPostFXOverlay();
+    composeCaptureCanvas();
   }
 
   if (options.syncUrl !== false) {
@@ -1124,32 +1337,36 @@ function drawModeWithData(modeId, data, targetCtx) {
 }
 
 function drawComboFrame() {
-  drawModeWithData(state.combo.modeA, state.combo.dataA, comboCtxA);
-  drawModeWithData(state.combo.modeB, state.combo.dataB, comboCtxB);
+  const count = state.combo.layerCount;
+  for (let i = 0; i < count; i += 1) {
+    const layer = state.combo.layers[i];
+    drawModeWithData(layer.mode, layer.data, comboLayers[i].ctx);
+  }
 
   baseCtx2d.save();
   baseCtx2d.setTransform(dpr, 0, 0, dpr, 0, 0);
-  baseCtx2d.globalCompositeOperation = "source-over";
-  baseCtx2d.globalAlpha = 1;
-  baseCtx2d.drawImage(comboLayerA, 0, 0, width, height);
-  baseCtx2d.globalCompositeOperation = state.combo.blend;
-  baseCtx2d.globalAlpha = 0.85;
-  baseCtx2d.drawImage(comboLayerB, 0, 0, width, height);
+  baseCtx2d.clearRect(0, 0, width, height);
+  for (let i = 0; i < count; i += 1) {
+    const layer = state.combo.layers[i];
+    baseCtx2d.globalCompositeOperation = i === 0 ? "source-over" : layer.blend;
+    baseCtx2d.globalAlpha = i === 0 ? 1 : 0.84;
+    baseCtx2d.drawImage(comboLayers[i].canvas, 0, 0, width, height);
+  }
   baseCtx2d.globalCompositeOperation = "source-over";
   baseCtx2d.globalAlpha = 1;
   baseCtx2d.restore();
 }
 
 function regenerateComboData() {
-  state.combo.dataA = buildModeData(state.combo.modeA, state.seed);
-  state.combo.dataB = buildModeData(state.combo.modeB, state.seed + 7919);
+  for (let i = 0; i < state.combo.layerCount; i += 1) {
+    state.combo.layers[i].data = buildModeData(state.combo.layers[i].mode, state.seed + i * 7919);
+  }
 
-  comboCtxA.setTransform(dpr, 0, 0, dpr, 0, 0);
-  comboCtxB.setTransform(dpr, 0, 0, dpr, 0, 0);
-  comboCtxA.fillStyle = paletteAt(0);
-  comboCtxA.fillRect(0, 0, width, height);
-  comboCtxB.fillStyle = paletteAt(0);
-  comboCtxB.fillRect(0, 0, width, height);
+  for (const layer of comboLayers) {
+    layer.ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    layer.ctx.fillStyle = paletteAt(0);
+    layer.ctx.fillRect(0, 0, width, height);
+  }
   baseCtx2d.fillStyle = paletteAt(0);
   baseCtx2d.fillRect(0, 0, width, height);
 }
@@ -1364,6 +1581,100 @@ function drawShaderFrame() {
   glCtx.drawArrays(glCtx.TRIANGLES, 0, 6);
 }
 
+function activeDisplayCanvas() {
+  return state.category === "shader3d" ? glCanvas : canvas;
+}
+
+function drawGrainTexture() {
+  const image = grainCtx.createImageData(grainCanvas.width, grainCanvas.height);
+  const arr = image.data;
+  for (let i = 0; i < arr.length; i += 4) {
+    const v = Math.floor(Math.random() * 255);
+    arr[i] = v;
+    arr[i + 1] = v;
+    arr[i + 2] = v;
+    arr[i + 3] = 255;
+  }
+  grainCtx.putImageData(image, 0, 0);
+}
+
+function drawPostFXOverlay() {
+  fxCtx.setTransform(dpr, 0, 0, dpr, 0, 0);
+  fxCtx.clearRect(0, 0, width, height);
+  if (!state.post.enabled) {
+    return;
+  }
+
+  const source = activeDisplayCanvas();
+
+  if (state.post.bloom > 0.001) {
+    fxCtx.save();
+    fxCtx.globalCompositeOperation = "screen";
+    fxCtx.globalAlpha = 0.12 + state.post.bloom * 0.28;
+    fxCtx.filter = `blur(${2 + state.post.bloom * 10}px)`;
+    fxCtx.drawImage(source, 0, 0, width, height);
+    fxCtx.filter = "none";
+    fxCtx.restore();
+  }
+
+  if (state.post.chroma > 0.001) {
+    const shift = 0.6 + state.post.chroma * 4.2;
+    fxCtx.save();
+    fxCtx.globalCompositeOperation = "lighter";
+    fxCtx.globalAlpha = 0.06 + state.post.chroma * 0.18;
+    fxCtx.drawImage(source, -shift, 0, width, height);
+    fxCtx.drawImage(source, shift, 0, width, height);
+    fxCtx.restore();
+  }
+
+  if (state.post.grain > 0.001) {
+    drawGrainTexture();
+    fxCtx.save();
+    fxCtx.globalCompositeOperation = "overlay";
+    fxCtx.globalAlpha = 0.05 + state.post.grain * 0.23;
+    fxCtx.drawImage(grainCanvas, 0, 0, width, height);
+    fxCtx.restore();
+  }
+
+  if (state.post.vignette > 0.001) {
+    const gradient = fxCtx.createRadialGradient(
+      width * 0.5,
+      height * 0.5,
+      Math.min(width, height) * 0.12,
+      width * 0.5,
+      height * 0.5,
+      Math.max(width, height) * 0.7
+    );
+    gradient.addColorStop(0, "rgba(0,0,0,0)");
+    gradient.addColorStop(1, `rgba(0,0,0,${0.15 + state.post.vignette * 0.45})`);
+    fxCtx.fillStyle = gradient;
+    fxCtx.fillRect(0, 0, width, height);
+  }
+}
+
+function composeCaptureCanvas() {
+  const source = activeDisplayCanvas();
+  captureCtx.setTransform(dpr, 0, 0, dpr, 0, 0);
+  captureCtx.clearRect(0, 0, width, height);
+  captureCtx.drawImage(source, 0, 0, width, height);
+  if (state.post.enabled) {
+    captureCtx.drawImage(fxCanvas, 0, 0, width, height);
+  }
+}
+
+function captureThumbnailDataUrl() {
+  composeCaptureCanvas();
+  const thumb = document.createElement("canvas");
+  const ratio = width / height;
+  const tw = 320;
+  const th = Math.floor(tw / Math.max(0.4, ratio));
+  thumb.width = tw;
+  thumb.height = th;
+  const tctx = thumb.getContext("2d", { willReadFrequently: true });
+  tctx.drawImage(captureCanvas, 0, 0, tw, th);
+  return thumb.toDataURL("image/png", 0.9);
+}
+
 function resize() {
   const frame = canvas.parentElement.getBoundingClientRect();
   width = Math.max(320, Math.floor(frame.width));
@@ -1374,14 +1685,25 @@ function resize() {
   canvas.height = Math.floor(height * dpr);
   glCanvas.width = Math.floor(width * dpr);
   glCanvas.height = Math.floor(height * dpr);
-  comboLayerA.width = Math.floor(width * dpr);
-  comboLayerA.height = Math.floor(height * dpr);
-  comboLayerB.width = Math.floor(width * dpr);
-  comboLayerB.height = Math.floor(height * dpr);
+  fxCanvas.width = Math.floor(width * dpr);
+  fxCanvas.height = Math.floor(height * dpr);
+  captureCanvas.width = Math.floor(width * dpr);
+  captureCanvas.height = Math.floor(height * dpr);
+
+  for (const layer of comboLayers) {
+    layer.canvas.width = Math.floor(width * dpr);
+    layer.canvas.height = Math.floor(height * dpr);
+  }
+
+  grainCanvas.width = 256;
+  grainCanvas.height = 256;
 
   baseCtx2d.setTransform(dpr, 0, 0, dpr, 0, 0);
-  comboCtxA.setTransform(dpr, 0, 0, dpr, 0, 0);
-  comboCtxB.setTransform(dpr, 0, 0, dpr, 0, 0);
+  fxCtx.setTransform(dpr, 0, 0, dpr, 0, 0);
+  captureCtx.setTransform(dpr, 0, 0, dpr, 0, 0);
+  for (const layer of comboLayers) {
+    layer.ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+  }
 
   if (shaderState.ready) {
     shaderState.gl.viewport(0, 0, glCanvas.width, glCanvas.height);
@@ -1401,12 +1723,17 @@ function regenerate() {
   if (state.category === "classic") {
     ctx = baseCtx2d;
     getMode(state.mode).build(state.rand);
+    getMode(state.mode).draw();
   } else if (state.category === "combo") {
     regenerateComboData();
+    drawComboFrame();
   } else {
     initShaderRenderer();
     drawShaderFrame();
   }
+
+  drawPostFXOverlay();
+  composeCaptureCanvas();
 }
 
 function tick() {
@@ -1420,6 +1747,8 @@ function tick() {
     } else {
       drawShaderFrame();
     }
+    drawPostFXOverlay();
+    composeCaptureCanvas();
   }
   animationId = requestAnimationFrame(tick);
 }
@@ -2293,7 +2622,7 @@ function drawBubbles() {
 }
 
 function getActiveRenderCanvas() {
-  return state.category === "shader3d" ? glCanvas : canvas;
+  return captureCanvas;
 }
 
 function updateRecordStatus(text) {
@@ -2425,10 +2754,10 @@ async function exportGifClip() {
   const tempCanvas = document.createElement("canvas");
   tempCanvas.width = gifWidth;
   tempCanvas.height = gifHeight;
-  const tempCtx = tempCanvas.getContext("2d");
+  const tempCtx = tempCanvas.getContext("2d", { willReadFrequently: true });
 
   const gif = new window.GIF({
-    workers: 2,
+    workers: 1,
     quality: 9,
     width: gifWidth,
     height: gifHeight,
@@ -2440,7 +2769,8 @@ async function exportGifClip() {
 
   for (let i = 0; i < frameCount; i += 1) {
     tempCtx.drawImage(source, 0, 0, gifWidth, gifHeight);
-    gif.addFrame(tempCanvas, { copy: true, delay: frameDelay });
+    const frameData = tempCtx.getImageData(0, 0, gifWidth, gifHeight);
+    gif.addFrame(frameData, { delay: frameDelay });
     updateRecordStatus(`Capturing GIF... ${i + 1}/${frameCount}`);
     await sleep(frameDelay);
   }
@@ -2449,8 +2779,12 @@ async function exportGifClip() {
   const blob = await new Promise((resolve, reject) => {
     gif.on("finished", resolve);
     gif.on("abort", () => reject(new Error("gif aborted")));
+    gif.on("error", () => reject(new Error("gif error")));
     gif.render();
-  }).catch(() => null);
+  }).catch((error) => {
+    console.error("GIF export error:", error);
+    return null;
+  });
 
   if (blob) {
     const modeLabel = state.category === "classic" ? state.mode : state.category === "shader3d" ? state.shaderMode : "combo";
@@ -2509,13 +2843,17 @@ function randomizeSelected() {
         state.shaderMode = randomChoice(ids);
       } else {
         const ids = modeDefs.map((item) => item.id);
-        state.combo.modeA = randomChoice(ids);
-        state.combo.modeB = randomChoice(ids);
+        for (let i = 0; i < state.combo.layerCount; i += 1) {
+          state.combo.layers[i].mode = randomChoice(ids);
+        }
       }
     }
 
     if (randBlend.checked && state.category === "combo") {
-      state.combo.blend = randomChoice(blendDefs.map((item) => item.id));
+      const blendIds = blendDefs.map((item) => item.id);
+      for (let i = 1; i < state.combo.layerCount; i += 1) {
+        state.combo.layers[i].blend = randomChoice(blendIds);
+      }
     }
 
     if (randPalette.checked) {
@@ -2559,22 +2897,52 @@ shaderModeSelect.addEventListener("change", () => {
   });
 });
 
-comboModeASelect.addEventListener("change", () => {
+comboLayerCountSelect.addEventListener("change", () => {
   commitChange(() => {
-    state.combo.modeA = comboModeASelect.value;
+    state.combo.layerCount = parseIntSafe(comboLayerCountSelect.value, state.combo.layerCount);
   });
 });
 
-comboModeBSelect.addEventListener("change", () => {
+comboMode1Select.addEventListener("change", () => {
   commitChange(() => {
-    state.combo.modeB = comboModeBSelect.value;
+    state.combo.layers[0].mode = comboMode1Select.value;
   });
 });
 
-comboBlendSelect.addEventListener("change", () => {
+comboMode2Select.addEventListener("change", () => {
   commitChange(() => {
-    state.combo.blend = comboBlendSelect.value;
-  }, { regenerate: false });
+    state.combo.layers[1].mode = comboMode2Select.value;
+  });
+});
+
+comboMode3Select.addEventListener("change", () => {
+  commitChange(() => {
+    state.combo.layers[2].mode = comboMode3Select.value;
+  });
+});
+
+comboMode4Select.addEventListener("change", () => {
+  commitChange(() => {
+    state.combo.layers[3].mode = comboMode4Select.value;
+  });
+});
+
+comboBlend2Select.addEventListener("change", () => {
+  commitChange(() => {
+    state.combo.layers[1].blend = comboBlend2Select.value;
+  });
+});
+
+comboBlend3Select.addEventListener("change", () => {
+  commitChange(() => {
+    state.combo.layers[2].blend = comboBlend3Select.value;
+  });
+});
+
+comboBlend4Select.addEventListener("change", () => {
+  commitChange(() => {
+    state.combo.layers[3].blend = comboBlend4Select.value;
+  });
 });
 
 paletteSelect.addEventListener("change", () => {
@@ -2601,6 +2969,22 @@ lineWidthRange.addEventListener("input", () => {
   lineWidthValue.textContent = formatMult(parseNum(lineWidthRange.value, state.params.lineWidth));
 });
 
+fxBloomRange.addEventListener("input", () => {
+  fxBloomValue.textContent = formatFx(parseNum(fxBloomRange.value, state.post.bloom));
+});
+
+fxChromaRange.addEventListener("input", () => {
+  fxChromaValue.textContent = formatFx(parseNum(fxChromaRange.value, state.post.chroma));
+});
+
+fxGrainRange.addEventListener("input", () => {
+  fxGrainValue.textContent = formatFx(parseNum(fxGrainRange.value, state.post.grain));
+});
+
+fxVignetteRange.addEventListener("input", () => {
+  fxVignetteValue.textContent = formatFx(parseNum(fxVignetteRange.value, state.post.vignette));
+});
+
 densityRange.addEventListener("change", () => {
   commitChange(() => {
     state.params.density = parseNum(densityRange.value, state.params.density);
@@ -2617,6 +3001,36 @@ lineWidthRange.addEventListener("change", () => {
   commitChange(() => {
     state.params.lineWidth = parseNum(lineWidthRange.value, state.params.lineWidth);
   });
+});
+
+fxEnabled.addEventListener("change", () => {
+  commitChange(() => {
+    state.post.enabled = fxEnabled.checked;
+  }, { regenerate: false });
+});
+
+fxBloomRange.addEventListener("change", () => {
+  commitChange(() => {
+    state.post.bloom = parseNum(fxBloomRange.value, state.post.bloom);
+  }, { regenerate: false });
+});
+
+fxChromaRange.addEventListener("change", () => {
+  commitChange(() => {
+    state.post.chroma = parseNum(fxChromaRange.value, state.post.chroma);
+  }, { regenerate: false });
+});
+
+fxGrainRange.addEventListener("change", () => {
+  commitChange(() => {
+    state.post.grain = parseNum(fxGrainRange.value, state.post.grain);
+  }, { regenerate: false });
+});
+
+fxVignetteRange.addEventListener("change", () => {
+  commitChange(() => {
+    state.post.vignette = parseNum(fxVignetteRange.value, state.post.vignette);
+  }, { regenerate: false });
 });
 
 generateBtn.addEventListener("click", () => {
@@ -2657,6 +3071,10 @@ downloadBtn.addEventListener("click", () => {
 
 copyLinkBtn.addEventListener("click", () => {
   copyShareUrl();
+});
+
+openGalleryBtn.addEventListener("click", () => {
+  window.location.href = "gallery.html";
 });
 
 presetSelect.addEventListener("change", () => {

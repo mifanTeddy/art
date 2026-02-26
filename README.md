@@ -1,6 +1,6 @@
 # Generative Garden
 
-Interactive generative art website with 30 classic modes, shader 3D rendering, mode combiner, presets, and recording export.
+Interactive generative art website with 30 classic modes, shader 3D rendering, multi-layer combiner, post-FX chain, presets, gallery, and recording export.
 
 ## Links
 
@@ -14,6 +14,8 @@ python3 -m http.server 8000
 ```
 
 Open: `http://localhost:8000`
+
+Gallery: `http://localhost:8000/gallery.html`
 
 ## Art modes (30)
 
@@ -53,18 +55,23 @@ Open: `http://localhost:8000`
 - Three categories:
   - `Classic Canvas` (30 modes)
   - `Shader 3D` (`Nebula Volume`, `Warp Tunnel`, `Metaball Galaxy`)
-  - `Mode Combiner` (A/B mode + blend)
+  - `Mode Combiner` (2-4 layers, per-layer blend)
 - Parameter panel: `Density`, `Speed`, `Line Width`
+- Post-FX chain:
+  - `Bloom`, `Chromatic`, `Grain`, `Vignette`
 - Randomize button with selectable attributes:
   - `Category`, `Mode`, `Blend`, `Palette`, `Seed`, `Density`, `Speed`, `Line Width`
 - Preset system (localStorage):
   - save/apply/delete presets in browser
+- Gallery page:
+  - local preset cards with thumbnail preview
+  - open/copy-link/delete preset
 - Undo previous generated settings (front-end history stack, max 30)
-- URL sync for shareable settings (`c`, `m`, `sm`, `a`, `b`, `bm`, `p`, `s`, `d`, `v`, `w`)
+- URL sync for shareable settings (`c`, `m`, `sm`, `cl`, `a`, `b`, `c3`, `c4`, `bm`, `b3`, `b4`, `p`, `s`, `d`, `v`, `w`, `fxe`, `fb`, `fc`, `fg`, `fv`)
 - Export options:
   - `PNG`
   - `WebM` recording (start/stop)
-  - `GIF` export (4s clip)
+  - `GIF` export (4s clip, fixed seam-safe capture path)
 - `Regenerate`, `Pause/Resume`, `Copy Share URL`
 - Responsive layout (desktop + mobile)
 
