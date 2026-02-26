@@ -78,8 +78,395 @@ const modeDefs = [
   { id: "tendrils", label: "Ink Tendrils", build: buildTendrils, draw: drawTendrils },
   { id: "rings", label: "Pulse Rings", build: buildRings, draw: drawRings },
   { id: "constellation", label: "Constellation", build: buildConstellation, draw: drawConstellation },
-  { id: "shards", label: "Glass Shards", build: buildShards, draw: drawShards }
+  { id: "shards", label: "Glass Shards", build: buildShards, draw: drawShards },
+  { id: "aurora", label: "Aurora Drift", build: buildAurora, draw: drawAurora },
+  { id: "smoke", label: "Smoke Trails", build: buildSmoke, draw: drawSmoke },
+  { id: "current", label: "Current Lines", build: buildCurrent, draw: drawCurrent },
+  { id: "pollen", label: "Pollen Storm", build: buildPollen, draw: drawPollen },
+  { id: "plasma", label: "Plasma Veins", build: buildPlasma, draw: drawPlasma },
+  { id: "tides", label: "Tidal Bands", build: buildTides, draw: drawTides },
+  { id: "braid", label: "Braid Waves", build: buildBraid, draw: drawBraid },
+  { id: "interference", label: "Interference Net", build: buildInterference, draw: drawInterference },
+  { id: "contour", label: "Contour Lines", build: buildContour, draw: drawContour },
+  { id: "silk", label: "Silk Strata", build: buildSilk, draw: drawSilk },
+  { id: "helix", label: "Helix Orbit", build: buildHelix, draw: drawHelix },
+  { id: "petals", label: "Petal Bloom", build: buildPetals, draw: drawPetals },
+  { id: "sunburst", label: "Sunburst Arc", build: buildSunburst, draw: drawSunburst },
+  { id: "radar", label: "Radar Sweep", build: buildRadar, draw: drawRadar },
+  { id: "nova", label: "Nova Sparks", build: buildNova, draw: drawNova },
+  { id: "quilt", label: "Quilt Tiles", build: buildQuilt, draw: drawQuilt },
+  { id: "glyph", label: "Glyph Grid", build: buildGlyph, draw: drawGlyph },
+  { id: "checker", label: "Checker Pulse", build: buildChecker, draw: drawChecker },
+  { id: "circuit", label: "Circuit Matrix", build: buildCircuit, draw: drawCircuit },
+  { id: "bubbles", label: "Bubble Cells", build: buildBubbles, draw: drawBubbles }
 ];
+
+const STREAM_VARIANTS = {
+  aurora: {
+    densityDiv: 980,
+    minCount: 150,
+    speedMin: 0.35,
+    speedMax: 1.4,
+    sizeMin: 0.4,
+    sizeMax: 1.5,
+    noise: 0.0032,
+    angle: 10,
+    turn: 0.2,
+    timeX: 0.65,
+    timeY: -0.3,
+    fade: 0.06,
+    alpha: 0.28,
+    lineMult: 1.2,
+    margin: 18
+  },
+  smoke: {
+    densityDiv: 840,
+    minCount: 180,
+    speedMin: 0.22,
+    speedMax: 0.95,
+    sizeMin: 0.7,
+    sizeMax: 2.2,
+    noise: 0.0047,
+    angle: 7,
+    turn: -0.8,
+    timeX: 0.42,
+    timeY: 0.08,
+    fade: 0.035,
+    alpha: 0.22,
+    lineMult: 1.6,
+    margin: 30
+  },
+  current: {
+    densityDiv: 1120,
+    minCount: 120,
+    speedMin: 0.7,
+    speedMax: 2.5,
+    sizeMin: 0.35,
+    sizeMax: 1.2,
+    noise: 0.0024,
+    angle: 12,
+    turn: 0,
+    timeX: 0.9,
+    timeY: -0.2,
+    fade: 0.1,
+    alpha: 0.34,
+    lineMult: 0.95,
+    margin: 20
+  },
+  pollen: {
+    densityDiv: 760,
+    minCount: 220,
+    speedMin: 0.55,
+    speedMax: 1.7,
+    sizeMin: 0.45,
+    sizeMax: 1.65,
+    noise: 0.0052,
+    angle: 9,
+    turn: 1.6,
+    timeX: 0.58,
+    timeY: 0.45,
+    fade: 0.075,
+    alpha: 0.31,
+    lineMult: 1.1,
+    margin: 25
+  },
+  plasma: {
+    densityDiv: 900,
+    minCount: 180,
+    speedMin: 0.45,
+    speedMax: 1.55,
+    sizeMin: 0.35,
+    sizeMax: 1.8,
+    noise: 0.0061,
+    angle: 15,
+    turn: -2.2,
+    timeX: 0.75,
+    timeY: -0.52,
+    fade: 0.055,
+    alpha: 0.3,
+    lineMult: 1.05,
+    margin: 22
+  }
+};
+
+const WAVE_VARIANTS = {
+  tides: {
+    countBase: 18,
+    countMin: 10,
+    ampMin: 20,
+    ampMax: 92,
+    freqMin: 0.0015,
+    freqMax: 0.009,
+    speedMin: 0.003,
+    speedMax: 0.012,
+    widthMin: 0.9,
+    widthMax: 2.6,
+    fade: 0.1,
+    alpha: 0.34,
+    step: 8,
+    secondFreq: 1.8,
+    secondPhase: 0.55,
+    mix: 0.36,
+    drift: 0.35
+  },
+  braid: {
+    countBase: 16,
+    countMin: 9,
+    ampMin: 28,
+    ampMax: 120,
+    freqMin: 0.002,
+    freqMax: 0.012,
+    speedMin: 0.004,
+    speedMax: 0.016,
+    widthMin: 0.8,
+    widthMax: 2.3,
+    fade: 0.075,
+    alpha: 0.3,
+    step: 7,
+    secondFreq: 2.2,
+    secondPhase: 0.84,
+    mix: 0.42,
+    drift: 0.62
+  },
+  interference: {
+    countBase: 24,
+    countMin: 12,
+    ampMin: 14,
+    ampMax: 70,
+    freqMin: 0.003,
+    freqMax: 0.016,
+    speedMin: 0.005,
+    speedMax: 0.021,
+    widthMin: 0.55,
+    widthMax: 1.9,
+    fade: 0.12,
+    alpha: 0.27,
+    step: 6,
+    secondFreq: 2.9,
+    secondPhase: 1.13,
+    mix: 0.48,
+    drift: 1.1
+  },
+  contour: {
+    countBase: 20,
+    countMin: 10,
+    ampMin: 10,
+    ampMax: 56,
+    freqMin: 0.0012,
+    freqMax: 0.0068,
+    speedMin: 0.002,
+    speedMax: 0.009,
+    widthMin: 0.7,
+    widthMax: 2,
+    fade: 0.085,
+    alpha: 0.33,
+    step: 10,
+    secondFreq: 1.4,
+    secondPhase: 0.36,
+    mix: 0.25,
+    drift: 0.2
+  },
+  silk: {
+    countBase: 22,
+    countMin: 11,
+    ampMin: 18,
+    ampMax: 85,
+    freqMin: 0.002,
+    freqMax: 0.01,
+    speedMin: 0.0028,
+    speedMax: 0.012,
+    widthMin: 0.55,
+    widthMax: 1.6,
+    fade: 0.06,
+    alpha: 0.24,
+    step: 7,
+    secondFreq: 2.4,
+    secondPhase: 0.72,
+    mix: 0.3,
+    drift: 0.4
+  }
+};
+
+const RADIAL_VARIANTS = {
+  helix: {
+    densityDiv: 3600,
+    minCount: 32,
+    radiusMin: 14,
+    radiusMaxScale: 0.53,
+    speedMin: -0.03,
+    speedMax: 0.03,
+    wobbleMin: 6,
+    wobbleMax: 42,
+    sizeMin: 0.8,
+    sizeMax: 2.2,
+    fade: 0.06,
+    alpha: 0.36,
+    style: "line",
+    arcMin: 0.2,
+    arcMax: 1.1,
+    centerAmpX: 0.11,
+    centerAmpY: 0.08,
+    centerFreqX: 0.005,
+    centerFreqY: 0.004
+  },
+  petals: {
+    densityDiv: 5200,
+    minCount: 28,
+    radiusMin: 10,
+    radiusMaxScale: 0.42,
+    speedMin: -0.026,
+    speedMax: 0.026,
+    wobbleMin: 12,
+    wobbleMax: 54,
+    sizeMin: 1.1,
+    sizeMax: 3.4,
+    fade: 0.05,
+    alpha: 0.42,
+    style: "dot",
+    arcMin: 0.5,
+    arcMax: 1.7,
+    centerAmpX: 0.04,
+    centerAmpY: 0.04,
+    centerFreqX: 0.003,
+    centerFreqY: 0.003
+  },
+  sunburst: {
+    densityDiv: 3000,
+    minCount: 36,
+    radiusMin: 8,
+    radiusMaxScale: 0.6,
+    speedMin: 0.01,
+    speedMax: 0.05,
+    wobbleMin: 3,
+    wobbleMax: 24,
+    sizeMin: 0.8,
+    sizeMax: 2.8,
+    fade: 0.085,
+    alpha: 0.38,
+    style: "arc",
+    arcMin: 0.3,
+    arcMax: 1.4,
+    centerAmpX: 0.08,
+    centerAmpY: 0.12,
+    centerFreqX: 0.004,
+    centerFreqY: 0.006
+  },
+  radar: {
+    densityDiv: 4400,
+    minCount: 22,
+    radiusMin: 24,
+    radiusMaxScale: 0.52,
+    speedMin: 0.008,
+    speedMax: 0.025,
+    wobbleMin: 2,
+    wobbleMax: 16,
+    sizeMin: 0.7,
+    sizeMax: 1.6,
+    fade: 0.1,
+    alpha: 0.33,
+    style: "arc",
+    arcMin: 0.12,
+    arcMax: 0.65,
+    centerAmpX: 0.03,
+    centerAmpY: 0.03,
+    centerFreqX: 0.002,
+    centerFreqY: 0.002
+  },
+  nova: {
+    densityDiv: 2800,
+    minCount: 42,
+    radiusMin: 6,
+    radiusMaxScale: 0.58,
+    speedMin: -0.05,
+    speedMax: 0.05,
+    wobbleMin: 4,
+    wobbleMax: 28,
+    sizeMin: 0.55,
+    sizeMax: 2.1,
+    fade: 0.07,
+    alpha: 0.35,
+    style: "line",
+    arcMin: 0.2,
+    arcMax: 0.8,
+    centerAmpX: 0.14,
+    centerAmpY: 0.14,
+    centerFreqX: 0.007,
+    centerFreqY: 0.006
+  }
+};
+
+const GRID_VARIANTS = {
+  quilt: {
+    baseStep: 34,
+    minStep: 14,
+    maxStep: 56,
+    scale: 0.01,
+    sizeMin: 0.35,
+    sizeMul: 0.82,
+    fade: 0.12,
+    alpha: 0.36,
+    shape: "diamond",
+    spin: 1.8,
+    tx: 0.62,
+    ty: 0.3
+  },
+  glyph: {
+    baseStep: 30,
+    minStep: 12,
+    maxStep: 50,
+    scale: 0.013,
+    sizeMin: 0.28,
+    sizeMul: 0.78,
+    fade: 0.13,
+    alpha: 0.34,
+    shape: "cross",
+    spin: 2.6,
+    tx: 0.7,
+    ty: 0.5
+  },
+  checker: {
+    baseStep: 28,
+    minStep: 11,
+    maxStep: 44,
+    scale: 0.009,
+    sizeMin: 0.3,
+    sizeMul: 0.9,
+    fade: 0.15,
+    alpha: 0.3,
+    shape: "rect",
+    spin: 0.8,
+    tx: 0.35,
+    ty: 0.2
+  },
+  circuit: {
+    baseStep: 32,
+    minStep: 14,
+    maxStep: 54,
+    scale: 0.014,
+    sizeMin: 0.24,
+    sizeMul: 0.72,
+    fade: 0.1,
+    alpha: 0.33,
+    shape: "bar",
+    spin: 3.2,
+    tx: 0.9,
+    ty: 0.74
+  },
+  bubbles: {
+    baseStep: 36,
+    minStep: 16,
+    maxStep: 60,
+    scale: 0.008,
+    sizeMin: 0.28,
+    sizeMul: 0.86,
+    fade: 0.11,
+    alpha: 0.38,
+    shape: "circle",
+    spin: 1.2,
+    tx: 0.4,
+    ty: 0.64
+  }
+};
 
 const modeMap = new Map(modeDefs.map((mode) => [mode.id, mode]));
 
@@ -912,6 +1299,391 @@ function drawShards() {
 
     ctx.restore();
   }
+}
+
+function buildStreamVariant(rand, cfg) {
+  const count = countWithDensity((width * height) / cfg.densityDiv, cfg.minCount);
+  const particles = [];
+
+  for (let i = 0; i < count; i += 1) {
+    particles.push({
+      x: rand() * width,
+      y: rand() * height,
+      speed: randIn(cfg.speedMin, cfg.speedMax, rand),
+      size: randIn(cfg.sizeMin, cfg.sizeMax, rand),
+      color: 1 + Math.floor(rand() * 4),
+      drift: rand() * 2000
+    });
+  }
+
+  state.data = { cfg, particles };
+}
+
+function drawStreamVariant() {
+  const cfg = state.data.cfg;
+  clearWithAlpha(cfg.fade);
+  ctx.lineCap = "round";
+
+  for (const particle of state.data.particles) {
+    const x1 = particle.x;
+    const y1 = particle.y;
+    const n = fbm(
+      (x1 + state.frame * cfg.timeX * state.params.speed + particle.drift) * cfg.noise,
+      (y1 + state.frame * cfg.timeY * state.params.speed - particle.drift * 0.2) * cfg.noise
+    );
+    const angle = n * Math.PI * cfg.angle + cfg.turn + Math.sin(state.frame * 0.01 + particle.drift) * 0.2;
+
+    particle.x += Math.cos(angle) * speedScale(particle.speed);
+    particle.y += Math.sin(angle) * speedScale(particle.speed);
+
+    if (particle.x < -cfg.margin) particle.x = width + cfg.margin;
+    if (particle.x > width + cfg.margin) particle.x = -cfg.margin;
+    if (particle.y < -cfg.margin) particle.y = height + cfg.margin;
+    if (particle.y > height + cfg.margin) particle.y = -cfg.margin;
+
+    ctx.strokeStyle = withAlpha(paletteAt(particle.color), cfg.alpha);
+    ctx.lineWidth = lineScale(particle.size * cfg.lineMult);
+    ctx.beginPath();
+    ctx.moveTo(x1, y1);
+    ctx.lineTo(particle.x, particle.y);
+    ctx.stroke();
+  }
+}
+
+function buildWaveVariant(rand, cfg) {
+  const count = clamp(Math.floor(cfg.countBase * state.params.density), cfg.countMin, 64);
+  const strips = [];
+
+  for (let i = 0; i < count; i += 1) {
+    strips.push({
+      y: rand() * height,
+      amp: randIn(cfg.ampMin, cfg.ampMax, rand),
+      freq: randIn(cfg.freqMin, cfg.freqMax, rand),
+      speed: randIn(cfg.speedMin, cfg.speedMax, rand),
+      width: randIn(cfg.widthMin, cfg.widthMax, rand),
+      phase: rand() * Math.PI * 2,
+      drift: rand() * Math.PI * 2,
+      color: 1 + Math.floor(rand() * 4)
+    });
+  }
+
+  state.data = { cfg, strips };
+}
+
+function drawWaveVariant() {
+  const cfg = state.data.cfg;
+  clearWithAlpha(cfg.fade);
+
+  for (const strip of state.data.strips) {
+    strip.phase += speedScale(strip.speed);
+    const yDrift = Math.sin(state.frame * 0.01 * cfg.drift * state.params.speed + strip.drift) * strip.amp * 0.08;
+    ctx.strokeStyle = withAlpha(paletteAt(strip.color), cfg.alpha);
+    ctx.lineWidth = lineScale(strip.width);
+    ctx.beginPath();
+
+    for (let x = 0; x <= width; x += cfg.step) {
+      const y =
+        strip.y +
+        yDrift +
+        Math.sin(x * strip.freq + strip.phase) * strip.amp +
+        Math.cos(x * strip.freq * cfg.secondFreq + strip.phase * cfg.secondPhase) * strip.amp * cfg.mix;
+
+      if (x === 0) ctx.moveTo(x, y);
+      else ctx.lineTo(x, y);
+    }
+
+    ctx.stroke();
+  }
+}
+
+function buildRadialVariant(rand, cfg) {
+  const count = countWithDensity((width * height) / cfg.densityDiv, cfg.minCount);
+  const items = [];
+  const maxRadius = Math.min(width, height) * cfg.radiusMaxScale;
+
+  for (let i = 0; i < count; i += 1) {
+    items.push({
+      radius: randIn(cfg.radiusMin, maxRadius, rand),
+      theta: rand() * Math.PI * 2,
+      speed: randIn(cfg.speedMin, cfg.speedMax, rand),
+      wobble: randIn(cfg.wobbleMin, cfg.wobbleMax, rand),
+      size: randIn(cfg.sizeMin, cfg.sizeMax, rand),
+      arcSpan: randIn(cfg.arcMin, cfg.arcMax, rand),
+      seed: rand() * 1000,
+      color: 1 + Math.floor(rand() * 4)
+    });
+  }
+
+  state.data = { cfg, items, maxRadius };
+}
+
+function drawRadialVariant() {
+  const cfg = state.data.cfg;
+  clearWithAlpha(cfg.fade);
+  const cx = width * 0.5 + Math.sin(state.frame * cfg.centerFreqX * state.params.speed) * width * cfg.centerAmpX;
+  const cy = height * 0.5 + Math.cos(state.frame * cfg.centerFreqY * state.params.speed) * height * cfg.centerAmpY;
+
+  for (const item of state.data.items) {
+    const radiusA = Math.abs(item.radius + Math.sin(state.frame * 0.018 * state.params.speed + item.seed) * item.wobble);
+    const x1 = cx + Math.cos(item.theta) * radiusA;
+    const y1 = cy + Math.sin(item.theta) * radiusA;
+
+    item.theta += speedScale(item.speed);
+
+    const radiusB = Math.abs(item.radius + Math.sin(state.frame * 0.018 * state.params.speed + item.seed + 0.4) * item.wobble);
+    const x2 = cx + Math.cos(item.theta) * radiusB;
+    const y2 = cy + Math.sin(item.theta) * radiusB;
+
+    ctx.strokeStyle = withAlpha(paletteAt(item.color), cfg.alpha);
+    ctx.fillStyle = withAlpha(paletteAt(item.color), cfg.alpha + 0.15);
+    ctx.lineWidth = lineScale(item.size);
+
+    if (cfg.style === "line") {
+      ctx.beginPath();
+      ctx.moveTo(x1, y1);
+      ctx.lineTo(x2, y2);
+      ctx.stroke();
+      continue;
+    }
+
+    if (cfg.style === "dot") {
+      ctx.beginPath();
+      ctx.arc(x2, y2, Math.max(0.4, lineScale(item.size)), 0, Math.PI * 2);
+      ctx.fill();
+      continue;
+    }
+
+    const span = item.arcSpan * (0.45 + state.params.speed * 0.55);
+    ctx.beginPath();
+    ctx.arc(cx, cy, Math.max(2, radiusB), item.theta, item.theta + span);
+    ctx.stroke();
+  }
+}
+
+function buildGridVariant(rand, cfg) {
+  const step = clamp(Math.floor(cfg.baseStep / Math.sqrt(state.params.density)), cfg.minStep, cfg.maxStep);
+  state.data = {
+    cfg,
+    step,
+    phase: rand() * 1000,
+    offset: rand() * Math.PI * 2
+  };
+}
+
+function drawGridShape(shape, size) {
+  if (shape === "rect") {
+    ctx.fillRect(-size * 0.5, -size * 0.5, size, size);
+    return;
+  }
+
+  if (shape === "diamond") {
+    ctx.rotate(Math.PI * 0.25);
+    ctx.fillRect(-size * 0.5, -size * 0.5, size, size);
+    return;
+  }
+
+  if (shape === "circle") {
+    ctx.beginPath();
+    ctx.arc(0, 0, size * 0.5, 0, Math.PI * 2);
+    ctx.fill();
+    return;
+  }
+
+  if (shape === "cross") {
+    const arm = size * 0.28;
+    ctx.fillRect(-arm * 0.5, -size * 0.5, arm, size);
+    ctx.fillRect(-size * 0.5, -arm * 0.5, size, arm);
+    return;
+  }
+
+  ctx.fillRect(-size * 0.5, -size * 0.18, size, size * 0.36);
+}
+
+function drawGridVariant() {
+  const cfg = state.data.cfg;
+  clearWithAlpha(cfg.fade);
+  const step = state.data.step;
+
+  for (let y = step * 0.5; y < height; y += step) {
+    for (let x = step * 0.5; x < width; x += step) {
+      const n = fbm(
+        (x + state.frame * cfg.tx * state.params.speed + state.data.phase) * cfg.scale,
+        (y - state.frame * cfg.ty * state.params.speed) * cfg.scale
+      );
+      const idx = 1 + Math.floor(((n * 4.3 + state.data.offset) % 4 + 4) % 4);
+      const sizeRaw = step * (cfg.sizeMin + n * cfg.sizeMul);
+      const size = clamp(sizeRaw, step * 0.12, step * 0.95);
+      const drawSize = size * (0.65 + state.params.lineWidth * 0.35);
+      const angle = n * Math.PI * 2 + state.frame * 0.002 * cfg.spin * state.params.speed;
+
+      ctx.save();
+      ctx.translate(x, y);
+      ctx.rotate(angle);
+      ctx.fillStyle = withAlpha(paletteAt(idx), cfg.alpha);
+      drawGridShape(cfg.shape, drawSize);
+      ctx.restore();
+    }
+  }
+}
+
+function buildAurora(rand) {
+  buildStreamVariant(rand, STREAM_VARIANTS.aurora);
+}
+
+function drawAurora() {
+  drawStreamVariant();
+}
+
+function buildSmoke(rand) {
+  buildStreamVariant(rand, STREAM_VARIANTS.smoke);
+}
+
+function drawSmoke() {
+  drawStreamVariant();
+}
+
+function buildCurrent(rand) {
+  buildStreamVariant(rand, STREAM_VARIANTS.current);
+}
+
+function drawCurrent() {
+  drawStreamVariant();
+}
+
+function buildPollen(rand) {
+  buildStreamVariant(rand, STREAM_VARIANTS.pollen);
+}
+
+function drawPollen() {
+  drawStreamVariant();
+}
+
+function buildPlasma(rand) {
+  buildStreamVariant(rand, STREAM_VARIANTS.plasma);
+}
+
+function drawPlasma() {
+  drawStreamVariant();
+}
+
+function buildTides(rand) {
+  buildWaveVariant(rand, WAVE_VARIANTS.tides);
+}
+
+function drawTides() {
+  drawWaveVariant();
+}
+
+function buildBraid(rand) {
+  buildWaveVariant(rand, WAVE_VARIANTS.braid);
+}
+
+function drawBraid() {
+  drawWaveVariant();
+}
+
+function buildInterference(rand) {
+  buildWaveVariant(rand, WAVE_VARIANTS.interference);
+}
+
+function drawInterference() {
+  drawWaveVariant();
+}
+
+function buildContour(rand) {
+  buildWaveVariant(rand, WAVE_VARIANTS.contour);
+}
+
+function drawContour() {
+  drawWaveVariant();
+}
+
+function buildSilk(rand) {
+  buildWaveVariant(rand, WAVE_VARIANTS.silk);
+}
+
+function drawSilk() {
+  drawWaveVariant();
+}
+
+function buildHelix(rand) {
+  buildRadialVariant(rand, RADIAL_VARIANTS.helix);
+}
+
+function drawHelix() {
+  drawRadialVariant();
+}
+
+function buildPetals(rand) {
+  buildRadialVariant(rand, RADIAL_VARIANTS.petals);
+}
+
+function drawPetals() {
+  drawRadialVariant();
+}
+
+function buildSunburst(rand) {
+  buildRadialVariant(rand, RADIAL_VARIANTS.sunburst);
+}
+
+function drawSunburst() {
+  drawRadialVariant();
+}
+
+function buildRadar(rand) {
+  buildRadialVariant(rand, RADIAL_VARIANTS.radar);
+}
+
+function drawRadar() {
+  drawRadialVariant();
+}
+
+function buildNova(rand) {
+  buildRadialVariant(rand, RADIAL_VARIANTS.nova);
+}
+
+function drawNova() {
+  drawRadialVariant();
+}
+
+function buildQuilt(rand) {
+  buildGridVariant(rand, GRID_VARIANTS.quilt);
+}
+
+function drawQuilt() {
+  drawGridVariant();
+}
+
+function buildGlyph(rand) {
+  buildGridVariant(rand, GRID_VARIANTS.glyph);
+}
+
+function drawGlyph() {
+  drawGridVariant();
+}
+
+function buildChecker(rand) {
+  buildGridVariant(rand, GRID_VARIANTS.checker);
+}
+
+function drawChecker() {
+  drawGridVariant();
+}
+
+function buildCircuit(rand) {
+  buildGridVariant(rand, GRID_VARIANTS.circuit);
+}
+
+function drawCircuit() {
+  drawGridVariant();
+}
+
+function buildBubbles(rand) {
+  buildGridVariant(rand, GRID_VARIANTS.bubbles);
+}
+
+function drawBubbles() {
+  drawGridVariant();
 }
 
 async function copyShareUrl() {
