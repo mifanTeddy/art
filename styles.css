@@ -125,6 +125,17 @@ input[type="range"] {
   gap: 0.35rem;
 }
 
+.preset-options,
+.record-options {
+  margin-top: 0.8rem;
+  padding: 0.6rem;
+  border-radius: 14px;
+  border: 1px solid rgba(16, 33, 50, 0.13);
+  background: rgba(255, 255, 255, 0.55);
+  display: grid;
+  gap: 0.4rem;
+}
+
 .random-options p {
   margin: 0 0 0.25rem;
   font-size: 0.8rem;
@@ -132,6 +143,22 @@ input[type="range"] {
   text-transform: uppercase;
   opacity: 0.75;
   font-family: "Menlo", "Consolas", monospace;
+}
+
+.preset-options p,
+.record-options p {
+  margin: 0 0 0.25rem;
+  font-size: 0.8rem;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  opacity: 0.75;
+  font-family: "Menlo", "Consolas", monospace;
+}
+
+.action-row {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 0.35rem;
 }
 
 .check-item {
@@ -210,6 +237,15 @@ button:hover {
   font-family: "Menlo", "Consolas", monospace;
 }
 
+.record-status {
+  margin: 0.1rem 0 0;
+  font-size: 0.8rem;
+  opacity: 0.7;
+  font-family: "Menlo", "Consolas", monospace;
+  text-transform: none;
+  letter-spacing: 0;
+}
+
 .canvas-frame {
   position: relative;
   border-radius: 28px;
@@ -277,5 +313,9 @@ button:hover {
   .control-panel {
     max-width: 100%;
     max-height: none;
+  }
+
+  .actions {
+    grid-template-columns: 1fr;
   }
 }

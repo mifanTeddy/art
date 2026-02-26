@@ -10,6 +10,14 @@ const pauseBtn = document.getElementById("pauseBtn");
 const downloadBtn = document.getElementById("downloadBtn");
 const copyLinkBtn = document.getElementById("copyLinkBtn");
 const historyStatus = document.getElementById("historyStatus");
+const presetSelect = document.getElementById("presetSelect");
+const presetNameInput = document.getElementById("presetNameInput");
+const savePresetBtn = document.getElementById("savePresetBtn");
+const applyPresetBtn = document.getElementById("applyPresetBtn");
+const deletePresetBtn = document.getElementById("deletePresetBtn");
+const recordWebmBtn = document.getElementById("recordWebmBtn");
+const exportGifBtn = document.getElementById("exportGifBtn");
+const recordStatus = document.getElementById("recordStatus");
 
 const densityRange = document.getElementById("densityRange");
 const speedRange = document.getElementById("speedRange");
@@ -26,6 +34,10 @@ const randSpeed = document.getElementById("randSpeed");
 const randLineWidth = document.getElementById("randLineWidth");
 
 const HISTORY_LIMIT = 30;
+const PRESET_LIMIT = 40;
+const PRESET_STORAGE_KEY = "generative-garden-presets-v1";
+const GIF_DURATION_MS = 4000;
+const GIF_FPS = 16;
 
 const PARAM_LIMITS = {
   density: { min: 0.4, max: 2.4, step: 0.1 },
@@ -536,6 +548,18 @@ state.combo = {
   dataB: null
 };
 
+const presetStore = {
+  items: [],
+  selectedId: ""
+};
+
+const recorderState = {
+  mediaRecorder: null,
+  chunks: [],
+  recordingWebm: false,
+  exportingGif: false
+};
+
 for (const mode of modeDefs) {
   const option = document.createElement("option");
   option.value = mode.id;
@@ -579,6 +603,9 @@ sanitizeState();
 syncControlsFromState();
 updateCategoryUI();
 updateHistoryUI();
+loadPresetStore();
+refreshPresetSelect();
+updateRecordStatus("Recorder idle");
 
 function mulberry32(seed) {
   let t = seed >>> 0;
@@ -820,18 +847,136 @@ function updateHistoryUI() {
   undoBtn.disabled = state.history.length === 0;
 }
 
+function defaultPresetName() {
+  const now = new Date();
+  const stamp = now.toISOString().replace("T", " ").slice(0, 16);
+  return `Preset ${stamp}`;
+}
+
+function loadPresetStore() {
+  try {
+    const raw = window.localStorage.getItem(PRESET_STORAGE_KEY);
+    if (!raw) {
+      presetStore.items = [];
+      presetStore.selectedId = "";
+      return;
+    }
+
+    const parsed = JSON.parse(raw);
+    if (!Array.isArray(parsed)) {
+      presetStore.items = [];
+      presetStore.selectedId = "";
+      return;
+    }
+
+    presetStore.items = parsed
+      .filter((item) => item && typeof item === "object" && item.id && item.name && item.snapshot)
+      .slice(0, PRESET_LIMIT);
+    presetStore.selectedId = presetStore.items[0]?.id || "";
+  } catch {
+    presetStore.items = [];
+    presetStore.selectedId = "";
+  }
+}
+
+function persistPresetStore() {
+  window.localStorage.setItem(PRESET_STORAGE_KEY, JSON.stringify(presetStore.items.slice(0, PRESET_LIMIT)));
+}
+
+function refreshPresetSelect() {
+  const currentSelected = presetStore.selectedId;
+  presetSelect.innerHTML = "";
+
+  if (presetStore.items.length === 0) {
+    const empty = document.createElement("option");
+    empty.value = "";
+    empty.textContent = "No presets saved";
+    presetSelect.appendChild(empty);
+    presetSelect.value = "";
+    applyPresetBtn.disabled = true;
+    deletePresetBtn.disabled = true;
+    return;
+  }
+
+  for (const item of presetStore.items) {
+    const option = document.createElement("option");
+    option.value = item.id;
+    option.textContent = item.name;
+    presetSelect.appendChild(option);
+  }
+
+  presetStore.selectedId = presetStore.items.some((item) => item.id === currentSelected)
+    ? currentSelected
+    : presetStore.items[0].id;
+  presetSelect.value = presetStore.selectedId;
+  applyPresetBtn.disabled = false;
+  deletePresetBtn.disabled = false;
+}
+
+function findPresetById(id) {
+  return presetStore.items.find((item) => item.id === id) || null;
+}
+
+function saveCurrentPreset() {
+  const rawName = (presetNameInput.value || "").trim();
+  const name = rawName || defaultPresetName();
+  const existingIndex = presetStore.items.findIndex((item) => item.name === name);
+  const entry = {
+    id: existingIndex >= 0 ? presetStore.items[existingIndex].id : `${Date.now()}-${Math.floor(Math.random() * 100000)}`,
+    name,
+    snapshot: snapshotState(),
+    updatedAt: Date.now()
+  };
+
+  if (existingIndex >= 0) {
+    presetStore.items.splice(existingIndex, 1);
+  }
+
+  presetStore.items.unshift(entry);
+  presetStore.items = presetStore.items.slice(0, PRESET_LIMIT);
+  presetStore.selectedId = entry.id;
+  persistPresetStore();
+  refreshPresetSelect();
+  presetNameInput.value = "";
+  flashButton(savePresetBtn, "Saved", "Save Preset");
+}
+
+function applySelectedPreset() {
+  const selected = findPresetById(presetSelect.value);
+  if (!selected) {
+    return;
+  }
+
+  commitChange(() => {
+    setStateFromSnapshot(selected.snapshot);
+  });
+}
+
+function deleteSelectedPreset() {
+  const selectedId = presetSelect.value;
+  if (!selectedId) {
+    return;
+  }
+
+  presetStore.items = presetStore.items.filter((item) => item.id !== selectedId);
+  presetStore.selectedId = presetStore.items[0]?.id || "";
+  persistPresetStore();
+  refreshPresetSelect();
+  flashButton(deletePresetBtn, "Deleted", "Delete Preset");
+}
+
 function setStateFromSnapshot(snapshot) {
-  state.category = snapshot.category;
-  state.mode = snapshot.mode;
-  state.shaderMode = snapshot.shaderMode;
-  state.combo.modeA = snapshot.combo.modeA;
-  state.combo.modeB = snapshot.combo.modeB;
-  state.combo.blend = snapshot.combo.blend;
-  state.paletteName = snapshot.paletteName;
-  state.seed = snapshot.seed;
-  state.params.density = snapshot.params.density;
-  state.params.speed = snapshot.params.speed;
-  state.params.lineWidth = snapshot.params.lineWidth;
+  state.category = snapshot.category || "classic";
+  state.mode = snapshot.mode || state.mode;
+  state.shaderMode = snapshot.shaderMode || state.shaderMode;
+  state.combo.modeA = snapshot.combo?.modeA || state.combo.modeA;
+  state.combo.modeB = snapshot.combo?.modeB || state.combo.modeB;
+  state.combo.blend = snapshot.combo?.blend || state.combo.blend;
+  state.paletteName = snapshot.paletteName || state.paletteName;
+  state.seed = snapshot.seed || state.seed;
+  state.params.density = snapshot.params?.density ?? state.params.density;
+  state.params.speed = snapshot.params?.speed ?? state.params.speed;
+  state.params.lineWidth = snapshot.params?.lineWidth ?? state.params.lineWidth;
   sanitizeState();
 }
 
@@ -1102,11 +1247,11 @@ function initShaderRenderer() {
     }
 
     float tunnel(vec2 uv) {
-      vec2 p = uv * rot(atan(uv.y, uv.x) * 0.15 + uTime * 0.03);
+      vec2 p = uv * rot(uTime * 0.03 + noise(uv * 2.0 + uSeed * 0.01) * 1.2);
       float r = max(length(p), 0.001);
-      float a = atan(p.y, p.x);
-      float lane = sin(14.0 / r - uTime * 2.0 * uSpeed + a * (5.0 + uDensity * 2.0));
-      float rip = noise(vec2(a * 2.5, 8.0 / r + uTime * 0.6));
+      vec2 dir = p / r;
+      float lane = sin(14.0 / r - uTime * 2.0 * uSpeed + dir.x * (6.5 + uDensity * 2.4) + dir.y * 4.1);
+      float rip = noise(dir * (2.5 + uDensity) + vec2(8.0 / r + uTime * 0.6, uSeed * 0.03));
       float rim = smoothstep(0.9, 0.02, r);
       return clamp(0.4 + lane * 0.25 + rip * 0.35 + rim * 0.3, 0.0, 1.0);
     }
@@ -2147,6 +2292,179 @@ function drawBubbles() {
   drawGridVariant();
 }
 
+function getActiveRenderCanvas() {
+  return state.category === "shader3d" ? glCanvas : canvas;
+}
+
+function updateRecordStatus(text) {
+  recordStatus.textContent = text;
+}
+
+function downloadBlob(blob, filename) {
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement("a");
+  link.download = filename;
+  link.href = url;
+  link.click();
+  setTimeout(() => URL.revokeObjectURL(url), 1500);
+}
+
+function pickWebmMimeType() {
+  if (typeof MediaRecorder === "undefined") {
+    return "";
+  }
+
+  const candidates = [
+    "video/webm;codecs=vp9",
+    "video/webm;codecs=vp8",
+    "video/webm"
+  ];
+
+  for (const type of candidates) {
+    if (MediaRecorder.isTypeSupported(type)) {
+      return type;
+    }
+  }
+
+  return "";
+}
+
+function startWebmRecording() {
+  if (recorderState.recordingWebm) {
+    return;
+  }
+
+  if (typeof MediaRecorder === "undefined") {
+    updateRecordStatus("MediaRecorder not supported in this browser");
+    flashButton(recordWebmBtn, "Not Supported", "Start WebM");
+    return;
+  }
+
+  const mimeType = pickWebmMimeType();
+  if (!mimeType) {
+    updateRecordStatus("No supported WebM mime type");
+    flashButton(recordWebmBtn, "No WebM Codec", "Start WebM");
+    return;
+  }
+
+  const stream = getActiveRenderCanvas().captureStream(60);
+  recorderState.chunks = [];
+
+  try {
+    recorderState.mediaRecorder = new MediaRecorder(stream, { mimeType });
+  } catch {
+    updateRecordStatus("Failed to start recorder");
+    flashButton(recordWebmBtn, "Recorder Error", "Start WebM");
+    return;
+  }
+
+  recorderState.mediaRecorder.ondataavailable = (event) => {
+    if (event.data && event.data.size > 0) {
+      recorderState.chunks.push(event.data);
+    }
+  };
+
+  recorderState.mediaRecorder.onstop = () => {
+    const blob = new Blob(recorderState.chunks, { type: mimeType });
+    const modeLabel = state.category === "classic" ? state.mode : state.category === "shader3d" ? state.shaderMode : "combo";
+    downloadBlob(blob, `generative-art-${modeLabel}-${state.seed}.webm`);
+    recorderState.recordingWebm = false;
+    recordWebmBtn.textContent = "Start WebM";
+    updateRecordStatus("WebM exported");
+    recorderState.chunks = [];
+    recorderState.mediaRecorder = null;
+    setTimeout(() => updateRecordStatus("Recorder idle"), 1400);
+  };
+
+  recorderState.mediaRecorder.start(300);
+  recorderState.recordingWebm = true;
+  recordWebmBtn.textContent = "Stop WebM";
+  updateRecordStatus("Recording WebM...");
+}
+
+function stopWebmRecording() {
+  if (!recorderState.recordingWebm || !recorderState.mediaRecorder) {
+    return;
+  }
+
+  recorderState.mediaRecorder.stop();
+}
+
+function toggleWebmRecording() {
+  if (recorderState.recordingWebm) {
+    stopWebmRecording();
+  } else {
+    startWebmRecording();
+  }
+}
+
+function sleep(ms) {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+async function exportGifClip() {
+  if (recorderState.exportingGif) {
+    return;
+  }
+
+  if (!window.GIF) {
+    updateRecordStatus("GIF library unavailable");
+    flashButton(exportGifBtn, "GIF Unavailable", "Export GIF (4s)");
+    return;
+  }
+
+  recorderState.exportingGif = true;
+  exportGifBtn.disabled = true;
+  updateRecordStatus("Capturing GIF frames...");
+
+  const source = getActiveRenderCanvas();
+  const maxSide = 720;
+  const scale = Math.min(1, maxSide / Math.max(width, height));
+  const gifWidth = Math.max(240, Math.floor(width * scale));
+  const gifHeight = Math.max(240, Math.floor(height * scale));
+  const tempCanvas = document.createElement("canvas");
+  tempCanvas.width = gifWidth;
+  tempCanvas.height = gifHeight;
+  const tempCtx = tempCanvas.getContext("2d");
+
+  const gif = new window.GIF({
+    workers: 2,
+    quality: 9,
+    width: gifWidth,
+    height: gifHeight,
+    workerScript: "https://cdn.jsdelivr.net/npm/gif.js.optimized/dist/gif.worker.js"
+  });
+
+  const frameDelay = Math.floor(1000 / GIF_FPS);
+  const frameCount = Math.floor(GIF_DURATION_MS / frameDelay);
+
+  for (let i = 0; i < frameCount; i += 1) {
+    tempCtx.drawImage(source, 0, 0, gifWidth, gifHeight);
+    gif.addFrame(tempCanvas, { copy: true, delay: frameDelay });
+    updateRecordStatus(`Capturing GIF... ${i + 1}/${frameCount}`);
+    await sleep(frameDelay);
+  }
+
+  updateRecordStatus("Encoding GIF...");
+  const blob = await new Promise((resolve, reject) => {
+    gif.on("finished", resolve);
+    gif.on("abort", () => reject(new Error("gif aborted")));
+    gif.render();
+  }).catch(() => null);
+
+  if (blob) {
+    const modeLabel = state.category === "classic" ? state.mode : state.category === "shader3d" ? state.shaderMode : "combo";
+    downloadBlob(blob, `generative-art-${modeLabel}-${state.seed}.gif`);
+    updateRecordStatus("GIF exported");
+    setTimeout(() => updateRecordStatus("Recorder idle"), 1500);
+  } else {
+    updateRecordStatus("GIF export failed");
+  }
+
+  recorderState.exportingGif = false;
+  exportGifBtn.disabled = false;
+}
+
 async function copyShareUrl() {
   syncUrlFromState();
   const text = window.location.href;
@@ -2328,16 +2646,41 @@ pauseBtn.addEventListener("click", () => {
 });
 
 downloadBtn.addEventListener("click", () => {
-  const link = document.createElement("a");
   const modeLabel = state.category === "classic" ? state.mode : state.category === "shader3d" ? state.shaderMode : "combo";
-  const activeCanvas = state.category === "shader3d" ? glCanvas : canvas;
+  const activeCanvas = getActiveRenderCanvas();
+  const dataUrl = activeCanvas.toDataURL("image/png");
+  const link = document.createElement("a");
   link.download = `generative-art-${modeLabel}-${state.seed}.png`;
-  link.href = activeCanvas.toDataURL("image/png");
+  link.href = dataUrl;
   link.click();
 });
 
 copyLinkBtn.addEventListener("click", () => {
   copyShareUrl();
+});
+
+presetSelect.addEventListener("change", () => {
+  presetStore.selectedId = presetSelect.value;
+});
+
+savePresetBtn.addEventListener("click", () => {
+  saveCurrentPreset();
+});
+
+applyPresetBtn.addEventListener("click", () => {
+  applySelectedPreset();
+});
+
+deletePresetBtn.addEventListener("click", () => {
+  deleteSelectedPreset();
+});
+
+recordWebmBtn.addEventListener("click", () => {
+  toggleWebmRecording();
+});
+
+exportGifBtn.addEventListener("click", () => {
+  exportGifClip();
 });
 
 window.addEventListener("resize", resize);

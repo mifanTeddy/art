@@ -72,6 +72,27 @@
           <label class="check-item"><input id="randSpeed" type="checkbox" checked> Speed</label>
           <label class="check-item"><input id="randLineWidth" type="checkbox" checked> Line Width</label>
         </section>
+
+        <section class="preset-options">
+          <p>Presets</p>
+          <label for="presetSelect">Preset List</label>
+          <select id="presetSelect"></select>
+          <input id="presetNameInput" type="text" placeholder="Preset name (optional)" maxlength="40">
+          <div class="action-row">
+            <button id="savePresetBtn" type="button">Save Preset</button>
+            <button id="applyPresetBtn" type="button">Apply Preset</button>
+            <button id="deletePresetBtn" type="button">Delete Preset</button>
+          </div>
+        </section>
+
+        <section class="record-options">
+          <p>Recording</p>
+          <div class="action-row">
+            <button id="recordWebmBtn" type="button">Start WebM</button>
+            <button id="exportGifBtn" type="button">Export GIF (4s)</button>
+          </div>
+          <p id="recordStatus" class="record-status">Recorder idle</p>
+        </section>
       </div>
 
       <div class="actions">
@@ -91,6 +112,7 @@
     </section>
   </main>
 
+  <script src="https://cdn.jsdelivr.net/npm/gif.js.optimized/dist/gif.js"></script>
   <script src="app.js"></script>
 </body>
 </html>

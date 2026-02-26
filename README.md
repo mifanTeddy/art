@@ -1,6 +1,6 @@
 # Generative Garden
 
-Interactive generative art website with 30 visual modes, configurable parameters, and shareable URLs.
+Interactive generative art website with 30 classic modes, shader 3D rendering, mode combiner, presets, and recording export.
 
 ## Links
 
@@ -50,13 +50,28 @@ Open: `http://localhost:8000`
 
 ## Main features
 
+- Three categories:
+  - `Classic Canvas` (30 modes)
+  - `Shader 3D` (`Nebula Volume`, `Warp Tunnel`, `Metaball Galaxy`)
+  - `Mode Combiner` (A/B mode + blend)
 - Parameter panel: `Density`, `Speed`, `Line Width`
 - Randomize button with selectable attributes:
-  - `Mode`, `Palette`, `Seed`, `Density`, `Speed`, `Line Width`
+  - `Category`, `Mode`, `Blend`, `Palette`, `Seed`, `Density`, `Speed`, `Line Width`
+- Preset system (localStorage):
+  - save/apply/delete presets in browser
 - Undo previous generated settings (front-end history stack, max 30)
-- URL sync for shareable settings (`m`, `p`, `s`, `d`, `v`, `w`)
-- `Regenerate`, `Pause/Resume`, `Export PNG`, `Copy Share URL`
+- URL sync for shareable settings (`c`, `m`, `sm`, `a`, `b`, `bm`, `p`, `s`, `d`, `v`, `w`)
+- Export options:
+  - `PNG`
+  - `WebM` recording (start/stop)
+  - `GIF` export (4s clip)
+- `Regenerate`, `Pause/Resume`, `Copy Share URL`
 - Responsive layout (desktop + mobile)
+
+## Notes
+
+- GIF export uses `gif.js` from CDN:
+  - `https://cdn.jsdelivr.net/npm/gif.js.optimized/dist/gif.js`
 
 ## Deploy to Vercel
 
