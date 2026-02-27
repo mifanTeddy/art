@@ -2,6 +2,7 @@ const canvas = document.getElementById("artCanvas");
 
 const modeSelect = document.getElementById("modeSelect");
 const paletteSelect = document.getElementById("paletteSelect");
+const baseToneSelect = document.getElementById("baseToneSelect");
 const seedInput = document.getElementById("seedInput");
 const generateBtn = document.getElementById("generateBtn");
 const randomBtn = document.getElementById("randomBtn");
@@ -29,6 +30,7 @@ const lineWidthValue = document.getElementById("lineWidthValue");
 
 const randMode = document.getElementById("randMode");
 const randPalette = document.getElementById("randPalette");
+const randBaseTone = document.getElementById("randBaseTone");
 const randSeed = document.getElementById("randSeed");
 const randDensity = document.getElementById("randDensity");
 const randSpeed = document.getElementById("randSpeed");
@@ -59,6 +61,7 @@ const PARAM_LIMITS = {
 const URL_KEYS = {
   mode: "m",
   palette: "p",
+  baseTone: "bg",
   seed: "s",
   density: "d",
   speed: "v",
@@ -77,6 +80,7 @@ const palettes = {
 const state = {
   mode: "flow",
   paletteName: "citrus",
+  baseTone: "palette",
   running: true,
   seed: Math.floor(Math.random() * 900000) + 100000,
   params: {
@@ -759,6 +763,10 @@ function paletteAt(index) {
   return p[clamp(index, 0, p.length - 1)];
 }
 
+function baseBackgroundColor() {
+  return state.baseTone === "white" ? "#ffffff" : paletteAt(0);
+}
+
 function randIn(min, max, rand = state.rand) {
   return min + (max - min) * rand();
 }
@@ -781,13 +789,19 @@ function lineScale(value) {
 
 function applyPaletteToUI() {
   const p = palettes[state.paletteName];
-  document.documentElement.style.setProperty("--bg-cream", p[0]);
+  if (state.baseTone === "white") {
+    document.documentElement.style.setProperty("--bg-cream", "#ffffff");
+    document.documentElement.style.setProperty("--bg-sand", "#ffffff");
+  } else {
+    document.documentElement.style.setProperty("--bg-cream", p[0]);
+    document.documentElement.style.setProperty("--bg-sand", "#e8dcc5");
+  }
   document.documentElement.style.setProperty("--accent", p[1]);
   document.documentElement.style.setProperty("--accent-soft", p[3]);
 }
 
 function clearWithAlpha(alpha) {
-  ctx.fillStyle = withAlpha(paletteAt(0), alpha);
+  ctx.fillStyle = withAlpha(baseBackgroundColor(), alpha);
   ctx.fillRect(0, 0, width, height);
 }
 
@@ -856,6 +870,7 @@ function sanitizeState() {
   }
 
   if (!palettes[state.paletteName]) state.paletteName = Object.keys(palettes)[0];
+  if (!["palette", "white"].includes(state.baseTone)) state.baseTone = "palette";
 
   state.seed = clamp(Math.floor(parseIntSafe(state.seed, 1)), 1, 9999999);
 
@@ -885,6 +900,7 @@ function snapshotState() {
       }))
     },
     paletteName: state.paletteName,
+    baseTone: state.baseTone,
     seed: state.seed,
     params: {
       density: state.params.density,
@@ -915,6 +931,7 @@ function snapshotsEqual(a, b) {
     a.shaderMode === b.shaderMode &&
     layersEqual &&
     a.paletteName === b.paletteName &&
+    a.baseTone === b.baseTone &&
     a.seed === b.seed &&
     a.params.density === b.params.density &&
     a.params.speed === b.params.speed &&
@@ -940,6 +957,7 @@ function pushHistory(snapshot) {
       }))
     },
     paletteName: snapshot.paletteName,
+    baseTone: snapshot.baseTone,
     seed: snapshot.seed,
     params: {
       density: snapshot.params.density,
@@ -1104,6 +1122,7 @@ function setStateFromSnapshot(snapshot) {
     }
   }
   state.paletteName = snapshot.paletteName || state.paletteName;
+  state.baseTone = snapshot.baseTone ?? "palette";
   state.seed = snapshot.seed || state.seed;
   state.params.density = snapshot.params?.density ?? state.params.density;
   state.params.speed = snapshot.params?.speed ?? state.params.speed;
@@ -1129,6 +1148,7 @@ function syncControlsFromState() {
   comboBlend3Select.value = state.combo.layers[2].blend;
   comboBlend4Select.value = state.combo.layers[3].blend;
   paletteSelect.value = state.paletteName;
+  baseToneSelect.value = state.baseTone;
   seedInput.value = String(state.seed);
   densityRange.value = String(state.params.density);
   speedRange.value = String(state.params.speed);
@@ -1163,6 +1183,7 @@ function syncUrlFromState() {
   url.searchParams.set(URL_KEYS.comboBlend3, state.combo.layers[2].blend);
   url.searchParams.set(URL_KEYS.comboBlend4, state.combo.layers[3].blend);
   url.searchParams.set(URL_KEYS.palette, state.paletteName);
+  url.searchParams.set(URL_KEYS.baseTone, state.baseTone);
   url.searchParams.set(URL_KEYS.seed, String(state.seed));
   url.searchParams.set(URL_KEYS.density, trimFloat(state.params.density));
   url.searchParams.set(URL_KEYS.speed, trimFloat(state.params.speed));
@@ -1189,6 +1210,7 @@ function applyStateFromUrl() {
   const comboBlend3Param = url.searchParams.get(URL_KEYS.comboBlend3);
   const comboBlend4Param = url.searchParams.get(URL_KEYS.comboBlend4);
   const paletteParam = url.searchParams.get(URL_KEYS.palette);
+  const baseToneParam = url.searchParams.get(URL_KEYS.baseTone);
   const seedParam = url.searchParams.get(URL_KEYS.seed);
   const densityParam = url.searchParams.get(URL_KEYS.density);
   const speedParam = url.searchParams.get(URL_KEYS.speed);
@@ -1245,6 +1267,10 @@ function applyStateFromUrl() {
 
   if (paletteParam && palettes[paletteParam]) {
     state.paletteName = paletteParam;
+  }
+
+  if (baseToneParam && ["palette", "white"].includes(baseToneParam)) {
+    state.baseTone = baseToneParam;
   }
 
   if (seedParam) {
@@ -1364,10 +1390,10 @@ function regenerateComboData() {
 
   for (const layer of comboLayers) {
     layer.ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
-    layer.ctx.fillStyle = paletteAt(0);
+    layer.ctx.fillStyle = baseBackgroundColor();
     layer.ctx.fillRect(0, 0, width, height);
   }
-  baseCtx2d.fillStyle = paletteAt(0);
+  baseCtx2d.fillStyle = baseBackgroundColor();
   baseCtx2d.fillRect(0, 0, width, height);
 }
 
@@ -1560,7 +1586,7 @@ function drawShaderFrame() {
   glCtx.vertexAttribPointer(shaderState.position, 2, glCtx.FLOAT, false, 0, 0);
 
   const p = palettes[state.paletteName];
-  const p0 = hexToRgb01(p[0]);
+  const p0 = hexToRgb01(baseBackgroundColor());
   const p1 = hexToRgb01(p[1]);
   const p2 = hexToRgb01(p[2]);
   const p3 = hexToRgb01(p[3]);
@@ -1719,7 +1745,7 @@ function regenerate() {
   state.rand = mulberry32(state.seed);
   applyPaletteToUI();
   baseCtx2d.setLineDash([]);
-  baseCtx2d.fillStyle = paletteAt(0);
+  baseCtx2d.fillStyle = baseBackgroundColor();
   baseCtx2d.fillRect(0, 0, width, height);
 
   if (state.category === "classic") {
@@ -1970,7 +1996,7 @@ function buildDunes(rand) {
 }
 
 function drawDunes() {
-  ctx.fillStyle = paletteAt(0);
+  ctx.fillStyle = baseBackgroundColor();
   ctx.fillRect(0, 0, width, height);
 
   for (const layer of state.data.layers) {
@@ -2822,7 +2848,7 @@ function flashButton(button, activeText, defaultText) {
 }
 
 function randomizeSelected() {
-  const selected = [randCategory, randMode, randBlend, randPalette, randSeed, randDensity, randSpeed, randLineWidth].some(
+  const selected = [randCategory, randMode, randBlend, randPalette, randBaseTone, randSeed, randDensity, randSpeed, randLineWidth].some(
     (item) => item.checked
   );
 
@@ -2861,6 +2887,10 @@ function randomizeSelected() {
     if (randPalette.checked) {
       const names = Object.keys(palettes);
       state.paletteName = randomChoice(names);
+    }
+
+    if (randBaseTone.checked) {
+      state.baseTone = randomChoice(["palette", "white"]);
     }
 
     if (randSeed.checked) {
@@ -2950,6 +2980,12 @@ comboBlend4Select.addEventListener("change", () => {
 paletteSelect.addEventListener("change", () => {
   commitChange(() => {
     state.paletteName = paletteSelect.value;
+  });
+});
+
+baseToneSelect.addEventListener("change", () => {
+  commitChange(() => {
+    state.baseTone = baseToneSelect.value;
   });
 });
 

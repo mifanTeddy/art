@@ -71,6 +71,12 @@
         <label for="paletteSelect">Palette</label>
         <select id="paletteSelect"></select>
 
+        <label for="baseToneSelect">Base Background</label>
+        <select id="baseToneSelect">
+          <option value="palette">Palette</option>
+          <option value="white">White</option>
+        </select>
+
         <label for="seedInput">Seed</label>
         <input id="seedInput" type="number" min="1" max="9999999" step="1">
 
@@ -91,6 +97,7 @@
           <label class="check-item"><input id="randMode" type="checkbox" checked> Mode</label>
           <label class="check-item"><input id="randBlend" type="checkbox"> Blend (Combiner)</label>
           <label class="check-item"><input id="randPalette" type="checkbox" checked> Palette</label>
+          <label class="check-item"><input id="randBaseTone" type="checkbox"> Base Background</label>
           <label class="check-item"><input id="randSeed" type="checkbox" checked> Seed</label>
           <label class="check-item"><input id="randDensity" type="checkbox" checked> Density</label>
           <label class="check-item"><input id="randSpeed" type="checkbox" checked> Speed</label>

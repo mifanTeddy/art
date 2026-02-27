@@ -37,6 +37,7 @@ function snapshotToQuery(snapshot) {
   params.set("b4", layers[3]?.blend || "multiply");
 
   params.set("p", snapshot.paletteName || "citrus");
+  params.set("bg", snapshot.baseTone || "palette");
   params.set("s", String(snapshot.seed || 1));
   params.set("d", trimFloat(snapshot.params?.density ?? 1));
   params.set("v", trimFloat(snapshot.params?.speed ?? 1));
