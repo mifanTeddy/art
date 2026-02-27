@@ -45,12 +45,27 @@ const fxBloomValue = document.getElementById("fxBloomValue");
 const fxChromaValue = document.getElementById("fxChromaValue");
 const fxGrainValue = document.getElementById("fxGrainValue");
 const fxVignetteValue = document.getElementById("fxVignetteValue");
+const audioEnabled = document.getElementById("audioEnabled");
+const audioInputSelect = document.getElementById("audioInputSelect");
+const audioFileInput = document.getElementById("audioFileInput");
+const audioFileLabel = document.getElementById("audioFileLabel");
+const audioReactivityRange = document.getElementById("audioReactivityRange");
+const audioReactivityValue = document.getElementById("audioReactivityValue");
+const audioStatus = document.getElementById("audioStatus");
+const audioLevel = document.getElementById("audioLevel");
 
 const HISTORY_LIMIT = 30;
 const PRESET_LIMIT = 40;
 const PRESET_STORAGE_KEY = "generative-garden-presets-v1";
 const GIF_DURATION_MS = 4000;
 const GIF_FPS = 16;
+const AUDIO_REACTIVITY = { min: 0, max: 2, step: 0.1 };
+const AUDIO_INPUT_IDS = ["demo-beat", "demo-ambient", "demo-arp", "upload", "mic"];
+const AUDIO_DEMO_FILES = {
+  "demo-beat": "assets/audio/demo-beat.wav",
+  "demo-ambient": "assets/audio/demo-ambient.wav",
+  "demo-arp": "assets/audio/demo-arp.wav"
+};
 
 const PARAM_LIMITS = {
   density: { min: 0.4, max: 2.4, step: 0.1 },
@@ -62,6 +77,9 @@ const URL_KEYS = {
   mode: "m",
   palette: "p",
   baseTone: "bg",
+  audioEnabled: "ae",
+  audioInput: "ai",
+  audioReactive: "ar",
   seed: "s",
   density: "d",
   speed: "v",
@@ -94,6 +112,11 @@ const state = {
     chroma: 0.08,
     grain: 0.1,
     vignette: 0.15
+  },
+  audio: {
+    enabled: false,
+    input: "demo-beat",
+    reactivity: 1
   },
   frame: 0,
   data: null,
@@ -588,6 +611,9 @@ URL_KEYS.fxBloom = "fb";
 URL_KEYS.fxChroma = "fc";
 URL_KEYS.fxGrain = "fg";
 URL_KEYS.fxVignette = "fv";
+URL_KEYS.audioEnabled = "ae";
+URL_KEYS.audioInput = "ai";
+URL_KEYS.audioReactive = "ar";
 
 state.category = "classic";
 state.shaderMode = "nebula3d";
@@ -611,6 +637,29 @@ const recorderState = {
   chunks: [],
   recordingWebm: false,
   exportingGif: false
+};
+
+const audioReactiveState = {
+  low: 0,
+  mid: 0,
+  high: 0,
+  volume: 0,
+  beat: 0
+};
+
+const audioRuntime = {
+  context: null,
+  analyser: null,
+  freqData: null,
+  timeData: null,
+  mediaElement: null,
+  mediaSource: null,
+  stream: null,
+  streamSource: null,
+  uploadedUrl: "",
+  routeKey: "",
+  prevLow: 0,
+  beatCooldown: 0
 };
 
 for (const mode of modeDefs) {
@@ -660,6 +709,9 @@ updateHistoryUI();
 loadPresetStore();
 refreshPresetSelect();
 updateRecordStatus("Recorder idle");
+setAudioLevelText();
+updateAudioStatus("Audio reactive off");
+updateAudioUiVisibility();
 
 function mulberry32(seed) {
   let t = seed >>> 0;
@@ -779,12 +831,30 @@ function countWithDensity(base, min = 1) {
   return Math.max(min, Math.floor(base * state.params.density));
 }
 
+function audioDensityFactor() {
+  if (!state.audio.enabled) return 1;
+  const drive = clamp(audioReactiveState.low * 0.9 + audioReactiveState.beat * 0.45, 0, 1.6);
+  return 1 + drive * state.audio.reactivity;
+}
+
+function audioSpeedFactor() {
+  if (!state.audio.enabled) return 1;
+  const drive = clamp(audioReactiveState.mid * 0.95 + audioReactiveState.beat * 0.4, 0, 1.7);
+  return 1 + drive * state.audio.reactivity;
+}
+
+function audioLineFactor() {
+  if (!state.audio.enabled) return 1;
+  const drive = clamp(audioReactiveState.volume * 0.8 + audioReactiveState.high * 0.45, 0, 1.4);
+  return 1 + drive * state.audio.reactivity;
+}
+
 function speedScale(value) {
-  return value * state.params.speed;
+  return value * state.params.speed * audioSpeedFactor();
 }
 
 function lineScale(value) {
-  return value * state.params.lineWidth;
+  return value * state.params.lineWidth * audioLineFactor();
 }
 
 function applyPaletteToUI() {
@@ -801,7 +871,8 @@ function applyPaletteToUI() {
 }
 
 function clearWithAlpha(alpha) {
-  ctx.fillStyle = withAlpha(baseBackgroundColor(), alpha);
+  const pulse = state.audio.enabled ? audioReactiveState.beat * 0.035 + audioReactiveState.volume * 0.015 : 0;
+  ctx.fillStyle = withAlpha(baseBackgroundColor(), clamp(alpha + pulse, 0, 1));
   ctx.fillRect(0, 0, width, height);
 }
 
@@ -885,6 +956,17 @@ function sanitizeState() {
   state.post.chroma = clamp01(parseNum(state.post.chroma, 0.08));
   state.post.grain = clamp01(parseNum(state.post.grain, 0.1));
   state.post.vignette = clamp01(parseNum(state.post.vignette, 0.15));
+
+  if (!state.audio || typeof state.audio !== "object") {
+    state.audio = { enabled: false, input: "demo-beat", reactivity: 1 };
+  }
+  state.audio.enabled = Boolean(state.audio.enabled);
+  if (!AUDIO_INPUT_IDS.includes(state.audio.input)) state.audio.input = "demo-beat";
+  state.audio.reactivity = clamp(
+    quantize(parseNum(state.audio.reactivity, 1), AUDIO_REACTIVITY.step),
+    AUDIO_REACTIVITY.min,
+    AUDIO_REACTIVITY.max
+  );
 }
 
 function snapshotState() {
@@ -913,6 +995,11 @@ function snapshotState() {
       chroma: state.post.chroma,
       grain: state.post.grain,
       vignette: state.post.vignette
+    },
+    audio: {
+      enabled: state.audio.enabled,
+      input: state.audio.input,
+      reactivity: state.audio.reactivity
     }
   };
 }
@@ -940,7 +1027,10 @@ function snapshotsEqual(a, b) {
     a.post.bloom === b.post.bloom &&
     a.post.chroma === b.post.chroma &&
     a.post.grain === b.post.grain &&
-    a.post.vignette === b.post.vignette
+    a.post.vignette === b.post.vignette &&
+    a.audio.enabled === b.audio.enabled &&
+    a.audio.input === b.audio.input &&
+    a.audio.reactivity === b.audio.reactivity
   );
 }
 
@@ -970,6 +1060,11 @@ function pushHistory(snapshot) {
       chroma: snapshot.post.chroma,
       grain: snapshot.post.grain,
       vignette: snapshot.post.vignette
+    },
+    audio: {
+      enabled: snapshot.audio.enabled,
+      input: snapshot.audio.input,
+      reactivity: snapshot.audio.reactivity
     }
   };
 
@@ -987,6 +1082,243 @@ function pushHistory(snapshot) {
 function updateHistoryUI() {
   historyStatus.textContent = `History ${state.history.length}/${HISTORY_LIMIT}`;
   undoBtn.disabled = state.history.length === 0;
+}
+
+function updateAudioStatus(text) {
+  audioStatus.textContent = text;
+}
+
+function updateAudioUiVisibility() {
+  const showUpload = state.audio.input === "upload";
+  audioFileLabel.style.display = showUpload ? "block" : "none";
+  audioFileInput.style.display = showUpload ? "block" : "none";
+}
+
+function setAudioLevelText() {
+  audioLevel.textContent = `Low ${Math.round(audioReactiveState.low * 100)}% Mid ${Math.round(audioReactiveState.mid * 100)}% High ${Math.round(
+    audioReactiveState.high * 100
+  )}%`;
+}
+
+function resetAudioReactiveState() {
+  audioReactiveState.low = 0;
+  audioReactiveState.mid = 0;
+  audioReactiveState.high = 0;
+  audioReactiveState.volume = 0;
+  audioReactiveState.beat = 0;
+  audioRuntime.prevLow = 0;
+  audioRuntime.beatCooldown = 0;
+  setAudioLevelText();
+}
+
+function ensureAudioContext() {
+  if (audioRuntime.context) {
+    return true;
+  }
+
+  const Ctx = window.AudioContext || window.webkitAudioContext;
+  if (!Ctx) {
+    updateAudioStatus("Web Audio API not supported");
+    return false;
+  }
+
+  audioRuntime.context = new Ctx();
+  audioRuntime.analyser = audioRuntime.context.createAnalyser();
+  audioRuntime.analyser.fftSize = 1024;
+  audioRuntime.analyser.smoothingTimeConstant = 0.72;
+  audioRuntime.freqData = new Uint8Array(audioRuntime.analyser.frequencyBinCount);
+  audioRuntime.timeData = new Uint8Array(audioRuntime.analyser.fftSize);
+  return true;
+}
+
+function disconnectAudioRouting({ stopStream = true, pauseMedia = true } = {}) {
+  if (audioRuntime.mediaSource) {
+    try {
+      audioRuntime.mediaSource.disconnect();
+    } catch {}
+  }
+
+  if (audioRuntime.streamSource) {
+    try {
+      audioRuntime.streamSource.disconnect();
+    } catch {}
+    audioRuntime.streamSource = null;
+  }
+
+  if (pauseMedia && audioRuntime.mediaElement) {
+    audioRuntime.mediaElement.pause();
+  }
+
+  if (stopStream && audioRuntime.stream) {
+    for (const track of audioRuntime.stream.getTracks()) {
+      track.stop();
+    }
+    audioRuntime.stream = null;
+  }
+}
+
+async function connectMediaAudio(srcUrl, label, loop = true) {
+  if (!ensureAudioContext()) {
+    return;
+  }
+
+  disconnectAudioRouting({ stopStream: true, pauseMedia: true });
+
+  if (!audioRuntime.mediaElement) {
+    const media = new Audio();
+    media.preload = "auto";
+    audioRuntime.mediaElement = media;
+  }
+
+  if (!audioRuntime.mediaSource) {
+    audioRuntime.mediaSource = audioRuntime.context.createMediaElementSource(audioRuntime.mediaElement);
+  }
+
+  const absoluteSrc = new URL(srcUrl, window.location.href).href;
+  if (audioRuntime.mediaElement.src !== absoluteSrc) {
+    audioRuntime.mediaElement.src = srcUrl;
+  }
+  audioRuntime.mediaElement.loop = loop;
+  audioRuntime.mediaSource.connect(audioRuntime.analyser);
+  audioRuntime.mediaSource.connect(audioRuntime.context.destination);
+  await audioRuntime.context.resume();
+  await audioRuntime.mediaElement.play();
+  updateAudioStatus(`Audio reactive on (${label})`);
+}
+
+async function connectMicrophoneAudio() {
+  if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+    updateAudioStatus("Microphone not supported");
+    return;
+  }
+
+  if (!ensureAudioContext()) {
+    return;
+  }
+
+  disconnectAudioRouting({ stopStream: true, pauseMedia: true });
+  const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+  audioRuntime.stream = stream;
+  audioRuntime.streamSource = audioRuntime.context.createMediaStreamSource(stream);
+  audioRuntime.streamSource.connect(audioRuntime.analyser);
+  await audioRuntime.context.resume();
+  updateAudioStatus("Audio reactive on (Microphone)");
+}
+
+async function syncAudioSourceFromState(force = false) {
+  updateAudioUiVisibility();
+  const desiredKey = state.audio.enabled
+    ? `${state.audio.input}:${state.audio.input === "upload" ? audioRuntime.uploadedUrl : "builtin"}`
+    : "off";
+
+  if (!force && desiredKey === audioRuntime.routeKey) {
+    return;
+  }
+
+  if (!state.audio.enabled) {
+    disconnectAudioRouting({ stopStream: true, pauseMedia: true });
+    audioRuntime.routeKey = "off";
+    resetAudioReactiveState();
+    updateAudioStatus("Audio reactive off");
+    return;
+  }
+
+  try {
+    if (state.audio.input === "mic") {
+      await connectMicrophoneAudio();
+      audioRuntime.routeKey = desiredKey;
+      return;
+    }
+
+    if (state.audio.input === "upload") {
+      if (!audioRuntime.uploadedUrl) {
+        disconnectAudioRouting({ stopStream: true, pauseMedia: true });
+        resetAudioReactiveState();
+        audioRuntime.routeKey = desiredKey;
+        updateAudioStatus("Select an audio file to start");
+        return;
+      }
+
+      await connectMediaAudio(audioRuntime.uploadedUrl, "Upload", true);
+      audioRuntime.routeKey = desiredKey;
+      return;
+    }
+
+    const demoFile = AUDIO_DEMO_FILES[state.audio.input];
+    if (!demoFile) {
+      throw new Error("Invalid audio input");
+    }
+
+    const label = audioInputSelect.options[audioInputSelect.selectedIndex]?.textContent || "Demo";
+    await connectMediaAudio(demoFile, label, true);
+    audioRuntime.routeKey = desiredKey;
+  } catch (error) {
+    audioRuntime.routeKey = "";
+    disconnectAudioRouting({ stopStream: true, pauseMedia: true });
+    resetAudioReactiveState();
+    updateAudioStatus("Audio start failed (check permissions)");
+    console.error("audio sync error:", error);
+  }
+}
+
+function averageBand(data, start, end) {
+  const from = clamp(Math.floor(start), 0, data.length - 1);
+  const to = clamp(Math.floor(end), from + 1, data.length);
+  let sum = 0;
+  for (let i = from; i < to; i += 1) {
+    sum += data[i];
+  }
+  return (sum / Math.max(1, to - from)) / 255;
+}
+
+function updateAudioReactiveState() {
+  if (!state.audio.enabled || !audioRuntime.analyser || !audioRuntime.freqData || !audioRuntime.timeData) {
+    audioReactiveState.low *= 0.92;
+    audioReactiveState.mid *= 0.92;
+    audioReactiveState.high *= 0.92;
+    audioReactiveState.volume *= 0.9;
+    audioReactiveState.beat *= 0.84;
+    if (state.frame % 8 === 0) {
+      setAudioLevelText();
+    }
+    return;
+  }
+
+  audioRuntime.analyser.getByteFrequencyData(audioRuntime.freqData);
+  audioRuntime.analyser.getByteTimeDomainData(audioRuntime.timeData);
+
+  const freqLen = audioRuntime.freqData.length;
+  const low = averageBand(audioRuntime.freqData, 0, freqLen * 0.14);
+  const mid = averageBand(audioRuntime.freqData, freqLen * 0.14, freqLen * 0.5);
+  const high = averageBand(audioRuntime.freqData, freqLen * 0.5, freqLen);
+
+  let sq = 0;
+  for (let i = 0; i < audioRuntime.timeData.length; i += 1) {
+    const normalized = (audioRuntime.timeData[i] - 128) / 128;
+    sq += normalized * normalized;
+  }
+  const volume = Math.sqrt(sq / audioRuntime.timeData.length);
+
+  const lowRise = low - audioRuntime.prevLow;
+  const beatThreshold = 0.08 + volume * 0.14;
+  let beat = 0;
+  if (audioRuntime.beatCooldown > 0) {
+    audioRuntime.beatCooldown -= 1;
+  } else if (lowRise > beatThreshold && low > 0.16) {
+    beat = 1;
+    audioRuntime.beatCooldown = 8;
+  }
+
+  audioRuntime.prevLow = audioRuntime.prevLow * 0.72 + low * 0.28;
+  audioReactiveState.low = audioReactiveState.low * 0.78 + low * 0.22;
+  audioReactiveState.mid = audioReactiveState.mid * 0.78 + mid * 0.22;
+  audioReactiveState.high = audioReactiveState.high * 0.78 + high * 0.22;
+  audioReactiveState.volume = audioReactiveState.volume * 0.75 + volume * 0.25;
+  audioReactiveState.beat = Math.max(beat, audioReactiveState.beat * 0.82);
+
+  if (state.frame % 6 === 0) {
+    setAudioLevelText();
+  }
 }
 
 function defaultPresetName() {
@@ -1132,6 +1464,9 @@ function setStateFromSnapshot(snapshot) {
   state.post.chroma = snapshot.post?.chroma ?? state.post.chroma;
   state.post.grain = snapshot.post?.grain ?? state.post.grain;
   state.post.vignette = snapshot.post?.vignette ?? state.post.vignette;
+  state.audio.enabled = snapshot.audio?.enabled ?? false;
+  state.audio.input = snapshot.audio?.input ?? "demo-beat";
+  state.audio.reactivity = snapshot.audio?.reactivity ?? 1;
   sanitizeState();
 }
 
@@ -1158,6 +1493,9 @@ function syncControlsFromState() {
   fxChromaRange.value = String(state.post.chroma);
   fxGrainRange.value = String(state.post.grain);
   fxVignetteRange.value = String(state.post.vignette);
+  audioEnabled.checked = state.audio.enabled;
+  audioInputSelect.value = state.audio.input;
+  audioReactivityRange.value = String(state.audio.reactivity);
 
   densityValue.textContent = formatMult(state.params.density);
   speedValue.textContent = formatMult(state.params.speed);
@@ -1166,7 +1504,9 @@ function syncControlsFromState() {
   fxChromaValue.textContent = formatFx(state.post.chroma);
   fxGrainValue.textContent = formatFx(state.post.grain);
   fxVignetteValue.textContent = formatFx(state.post.vignette);
+  audioReactivityValue.textContent = formatMult(state.audio.reactivity);
   updateCategoryUI();
+  updateAudioUiVisibility();
 }
 
 function syncUrlFromState() {
@@ -1193,6 +1533,9 @@ function syncUrlFromState() {
   url.searchParams.set(URL_KEYS.fxChroma, trimFloat(state.post.chroma));
   url.searchParams.set(URL_KEYS.fxGrain, trimFloat(state.post.grain));
   url.searchParams.set(URL_KEYS.fxVignette, trimFloat(state.post.vignette));
+  url.searchParams.set(URL_KEYS.audioEnabled, state.audio.enabled ? "1" : "0");
+  url.searchParams.set(URL_KEYS.audioInput, state.audio.input);
+  url.searchParams.set(URL_KEYS.audioReactive, trimFloat(state.audio.reactivity));
   window.history.replaceState(null, "", url);
 }
 
@@ -1220,6 +1563,9 @@ function applyStateFromUrl() {
   const fxChromaParam = url.searchParams.get(URL_KEYS.fxChroma);
   const fxGrainParam = url.searchParams.get(URL_KEYS.fxGrain);
   const fxVignetteParam = url.searchParams.get(URL_KEYS.fxVignette);
+  const audioEnabledParam = url.searchParams.get(URL_KEYS.audioEnabled);
+  const audioInputParam = url.searchParams.get(URL_KEYS.audioInput);
+  const audioReactiveParam = url.searchParams.get(URL_KEYS.audioReactive);
 
   if (categoryParam) {
     state.category = categoryParam;
@@ -1308,6 +1654,18 @@ function applyStateFromUrl() {
   if (fxVignetteParam !== null) {
     state.post.vignette = parseNum(fxVignetteParam, state.post.vignette);
   }
+
+  if (audioEnabledParam !== null) {
+    state.audio.enabled = audioEnabledParam === "1";
+  }
+
+  if (audioInputParam && AUDIO_INPUT_IDS.includes(audioInputParam)) {
+    state.audio.input = audioInputParam;
+  }
+
+  if (audioReactiveParam !== null) {
+    state.audio.reactivity = parseNum(audioReactiveParam, state.audio.reactivity);
+  }
 }
 
 function commitChange(mutator, options = {}) {
@@ -1338,6 +1696,7 @@ function commitChange(mutator, options = {}) {
     syncUrlFromState();
   }
 
+  void syncAudioSourceFromState();
   updateHistoryUI();
 }
 
@@ -1595,9 +1954,9 @@ function drawShaderFrame() {
   glCtx.uniform2f(shaderState.uniforms.resolution, glCanvas.width, glCanvas.height);
   glCtx.uniform1f(shaderState.uniforms.time, state.frame * 0.016);
   glCtx.uniform1f(shaderState.uniforms.seed, state.seed);
-  glCtx.uniform1f(shaderState.uniforms.density, state.params.density);
-  glCtx.uniform1f(shaderState.uniforms.speed, state.params.speed);
-  glCtx.uniform1f(shaderState.uniforms.line, state.params.lineWidth);
+  glCtx.uniform1f(shaderState.uniforms.density, state.params.density * audioDensityFactor());
+  glCtx.uniform1f(shaderState.uniforms.speed, state.params.speed * audioSpeedFactor());
+  glCtx.uniform1f(shaderState.uniforms.line, state.params.lineWidth * audioLineFactor());
   glCtx.uniform1i(shaderState.uniforms.mode, shaderModeIndex(state.shaderMode));
   glCtx.uniform3f(shaderState.uniforms.palette0, p0[0], p0[1], p0[2]);
   glCtx.uniform3f(shaderState.uniforms.palette1, p1[0], p1[1], p1[2]);
@@ -1765,6 +2124,7 @@ function regenerate() {
 }
 
 function tick() {
+  updateAudioReactiveState();
   if (state.running) {
     state.frame += 1;
     if (state.category === "classic") {
@@ -3023,6 +3383,10 @@ fxVignetteRange.addEventListener("input", () => {
   fxVignetteValue.textContent = formatFx(parseNum(fxVignetteRange.value, state.post.vignette));
 });
 
+audioReactivityRange.addEventListener("input", () => {
+  audioReactivityValue.textContent = formatMult(parseNum(audioReactivityRange.value, state.audio.reactivity));
+});
+
 densityRange.addEventListener("change", () => {
   commitChange(() => {
     state.params.density = parseNum(densityRange.value, state.params.density);
@@ -3071,6 +3435,40 @@ fxVignetteRange.addEventListener("change", () => {
   }, { regenerate: false });
 });
 
+audioEnabled.addEventListener("change", () => {
+  commitChange(() => {
+    state.audio.enabled = audioEnabled.checked;
+  }, { regenerate: false });
+});
+
+audioInputSelect.addEventListener("change", () => {
+  commitChange(() => {
+    state.audio.input = audioInputSelect.value;
+  }, { regenerate: false });
+});
+
+audioReactivityRange.addEventListener("change", () => {
+  commitChange(() => {
+    state.audio.reactivity = parseNum(audioReactivityRange.value, state.audio.reactivity);
+  }, { regenerate: false });
+});
+
+audioFileInput.addEventListener("change", () => {
+  const file = audioFileInput.files && audioFileInput.files[0];
+  if (!file) {
+    return;
+  }
+
+  if (audioRuntime.uploadedUrl) {
+    URL.revokeObjectURL(audioRuntime.uploadedUrl);
+  }
+  audioRuntime.uploadedUrl = URL.createObjectURL(file);
+
+  commitChange(() => {
+    state.audio.input = "upload";
+  }, { regenerate: false });
+});
+
 generateBtn.addEventListener("click", () => {
   regenerate();
 });
@@ -3089,6 +3487,7 @@ undoBtn.addEventListener("click", () => {
   syncControlsFromState();
   regenerate();
   syncUrlFromState();
+  void syncAudioSourceFromState();
   updateHistoryUI();
 });
 
@@ -3140,9 +3539,17 @@ exportGifBtn.addEventListener("click", () => {
 });
 
 window.addEventListener("resize", resize);
+window.addEventListener("beforeunload", () => {
+  disconnectAudioRouting({ stopStream: true, pauseMedia: true });
+  if (audioRuntime.uploadedUrl) {
+    URL.revokeObjectURL(audioRuntime.uploadedUrl);
+    audioRuntime.uploadedUrl = "";
+  }
+});
 
 syncUrlFromState();
 setCanvasVisibility();
 resize();
+void syncAudioSourceFromState(true);
 cancelAnimationFrame(animationId);
 tick();

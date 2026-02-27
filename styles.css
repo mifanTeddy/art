@@ -136,6 +136,7 @@ input[type="range"] {
 
 .preset-options,
 .record-options,
+.audio-options,
 .postfx-options {
   margin-top: 0.8rem;
   padding: 0.6rem;
@@ -157,6 +158,7 @@ input[type="range"] {
 
 .preset-options p,
 .record-options p,
+.audio-options p,
 .postfx-options p {
   margin: 0 0 0.25rem;
   font-size: 0.8rem;
@@ -255,6 +257,19 @@ button:hover {
   font-family: "Menlo", "Consolas", monospace;
   text-transform: none;
   letter-spacing: 0;
+}
+
+.audio-status {
+  margin: 0.1rem 0 0;
+  font-size: 0.8rem;
+  opacity: 0.72;
+  font-family: "Menlo", "Consolas", monospace;
+  text-transform: none;
+  letter-spacing: 0;
+}
+
+#audioFileInput {
+  display: none;
 }
 
 .canvas-frame {

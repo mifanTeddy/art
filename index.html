@@ -104,25 +104,27 @@
           <label class="check-item"><input id="randLineWidth" type="checkbox" checked> Line Width</label>
         </section>
 
-        <section class="preset-options">
-          <p>Presets</p>
-          <label for="presetSelect">Preset List</label>
-          <select id="presetSelect"></select>
-          <input id="presetNameInput" type="text" placeholder="Preset name (optional)" maxlength="40">
-          <div class="action-row">
-            <button id="savePresetBtn" type="button">Save Preset</button>
-            <button id="applyPresetBtn" type="button">Apply Preset</button>
-            <button id="deletePresetBtn" type="button">Delete Preset</button>
-          </div>
-        </section>
+        <section class="audio-options">
+          <p>Audio Reactive</p>
+          <label class="check-item"><input id="audioEnabled" type="checkbox"> Enable Audio Reactive</label>
 
-        <section class="record-options">
-          <p>Recording</p>
-          <div class="action-row">
-            <button id="recordWebmBtn" type="button">Start WebM</button>
-            <button id="exportGifBtn" type="button">Export GIF (4s)</button>
-          </div>
-          <p id="recordStatus" class="record-status">Recorder idle</p>
+          <label for="audioInputSelect">Input Source</label>
+          <select id="audioInputSelect">
+            <option value="demo-beat">Demo - Beat Bloom</option>
+            <option value="demo-ambient">Demo - Ambient Drift</option>
+            <option value="demo-arp">Demo - Arp Sparks</option>
+            <option value="upload">Upload Audio File</option>
+            <option value="mic">Microphone</option>
+          </select>
+
+          <label for="audioFileInput" id="audioFileLabel">Audio File</label>
+          <input id="audioFileInput" type="file" accept="audio/*">
+
+          <label for="audioReactivityRange">Reactivity <span id="audioReactivityValue" class="value-pill">1.0x</span></label>
+          <input id="audioReactivityRange" type="range" min="0" max="2" step="0.1" value="1">
+
+          <p id="audioStatus" class="audio-status">Audio reactive off</p>
+          <p id="audioLevel" class="audio-status">Low 0% Mid 0% High 0%</p>
         </section>
 
         <section class="postfx-options">
@@ -152,6 +154,28 @@
         <button id="copyLinkBtn" type="button">Copy Share URL</button>
         <button id="openGalleryBtn" type="button">Open Gallery</button>
       </div>
+
+      <section class="preset-options">
+        <p>Presets</p>
+        <label for="presetSelect">Preset List</label>
+        <select id="presetSelect"></select>
+        <input id="presetNameInput" type="text" placeholder="Preset name (optional)" maxlength="40">
+        <div class="action-row">
+          <button id="savePresetBtn" type="button">Save Preset</button>
+          <button id="applyPresetBtn" type="button">Apply Preset</button>
+          <button id="deletePresetBtn" type="button">Delete Preset</button>
+        </div>
+      </section>
+
+      <section class="record-options">
+        <p>Recording</p>
+        <div class="action-row">
+          <button id="recordWebmBtn" type="button">Start WebM</button>
+          <button id="exportGifBtn" type="button">Export GIF (4s)</button>
+        </div>
+        <p id="recordStatus" class="record-status">Recorder idle</p>
+      </section>
+
       <p id="historyStatus" class="history-status">History 0/30</p>
     </section>
 

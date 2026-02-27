@@ -47,6 +47,9 @@ function snapshotToQuery(snapshot) {
   params.set("fc", trimFloat(snapshot.post?.chroma ?? 0.2));
   params.set("fg", trimFloat(snapshot.post?.grain ?? 0.2));
   params.set("fv", trimFloat(snapshot.post?.vignette ?? 0.3));
+  params.set("ae", snapshot.audio?.enabled ? "1" : "0");
+  params.set("ai", snapshot.audio?.input || "demo-beat");
+  params.set("ar", trimFloat(snapshot.audio?.reactivity ?? 1));
 
   return params.toString();
 }
