@@ -111,6 +111,14 @@ function render() {
     });
     actions.appendChild(openBtn);
 
+    const detailBtn = document.createElement("button");
+    detailBtn.type = "button";
+    detailBtn.textContent = "Details";
+    detailBtn.addEventListener("click", () => {
+      window.location.href = `artwork.html?id=${encodeURIComponent(item.id)}`;
+    });
+    actions.appendChild(detailBtn);
+
     const copyBtn = document.createElement("button");
     copyBtn.type = "button";
     copyBtn.textContent = "Copy Link";

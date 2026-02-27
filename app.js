@@ -67,24 +67,8 @@ const AUDIO_DEMO_FILES = {
   "demo-arp": "assets/audio/demo-arp.wav"
 };
 
-const PARAM_LIMITS = {
-  density: { min: 0.4, max: 2.4, step: 0.1 },
-  speed: { min: 0.3, max: 2.5, step: 0.1 },
-  lineWidth: { min: 0.4, max: 2.5, step: 0.1 }
-};
-
-const URL_KEYS = {
-  mode: "m",
-  palette: "p",
-  baseTone: "bg",
-  audioEnabled: "ae",
-  audioInput: "ai",
-  audioReactive: "ar",
-  seed: "s",
-  density: "d",
-  speed: "v",
-  lineWidth: "w"
-};
+const PARAM_LIMITS = window.GGStateStore.PARAM_LIMITS;
+const URL_KEYS = { ...window.GGStateStore.BASE_URL_KEYS };
 
 const palettes = {
   citrus: ["#f8f3e9", "#f06449", "#f5d547", "#4ea7a0", "#102132"],
@@ -95,34 +79,7 @@ const palettes = {
   mint: ["#f1fff7", "#00a878", "#57cc99", "#22577a", "#1b4332"]
 };
 
-const state = {
-  mode: "flow",
-  paletteName: "citrus",
-  baseTone: "palette",
-  running: true,
-  seed: Math.floor(Math.random() * 900000) + 100000,
-  params: {
-    density: 1,
-    speed: 1,
-    lineWidth: 1
-  },
-  post: {
-    enabled: false,
-    bloom: 0.2,
-    chroma: 0.08,
-    grain: 0.1,
-    vignette: 0.15
-  },
-  audio: {
-    enabled: false,
-    input: "demo-beat",
-    reactivity: 1
-  },
-  frame: 0,
-  data: null,
-  rand: null,
-  history: []
-};
+const state = window.GGStateStore.createInitialState();
 
 const modeDefs = [
   { id: "flow", label: "Flow Field", build: buildFlow, draw: drawFlow },
@@ -537,9 +494,14 @@ const blendDefs = [
   { id: "source-over", label: "Normal" }
 ];
 
-const modeMap = new Map(modeDefs.map((mode) => [mode.id, mode]));
-const shaderModeMap = new Map(shaderModeDefs.map((mode) => [mode.id, mode]));
-const blendMap = new Map(blendDefs.map((blend) => [blend.id, blend]));
+const modeRegistry = window.GGModeRegistry.create();
+for (const mode of modeDefs) modeRegistry.register("classic", mode);
+for (const mode of shaderModeDefs) modeRegistry.register("shader3d", mode);
+for (const blend of blendDefs) modeRegistry.register("blend", blend);
+
+const modeMap = modeRegistry.map("classic");
+const shaderModeMap = modeRegistry.map("shader3d");
+const blendMap = modeRegistry.map("blend");
 
 const categorySelect = document.getElementById("categorySelect");
 const classicGroup = document.getElementById("classicGroup");
@@ -581,6 +543,12 @@ const captureCtx = captureCanvas.getContext("2d", { willReadFrequently: true });
 const grainCanvas = document.createElement("canvas");
 const grainCtx = grainCanvas.getContext("2d", { willReadFrequently: true });
 
+const grainWorkerState = {
+  worker: null,
+  pending: false,
+  latest: null
+};
+
 const shaderState = {
   gl: null,
   ready: false,
@@ -595,6 +563,7 @@ let dpr = Math.max(1, Math.min(2, window.devicePixelRatio || 1));
 let width = 1;
 let height = 1;
 let animationId = 0;
+let renderPipeline = null;
 
 URL_KEYS.category = "c";
 URL_KEYS.shaderMode = "sm";
@@ -832,21 +801,15 @@ function countWithDensity(base, min = 1) {
 }
 
 function audioDensityFactor() {
-  if (!state.audio.enabled) return 1;
-  const drive = clamp(audioReactiveState.low * 0.9 + audioReactiveState.beat * 0.45, 0, 1.6);
-  return 1 + drive * state.audio.reactivity;
+  return window.GGAudioReactiveCore.factors(audioReactiveState, state.audio.enabled, state.audio.reactivity).density;
 }
 
 function audioSpeedFactor() {
-  if (!state.audio.enabled) return 1;
-  const drive = clamp(audioReactiveState.mid * 0.95 + audioReactiveState.beat * 0.4, 0, 1.7);
-  return 1 + drive * state.audio.reactivity;
+  return window.GGAudioReactiveCore.factors(audioReactiveState, state.audio.enabled, state.audio.reactivity).speed;
 }
 
 function audioLineFactor() {
-  if (!state.audio.enabled) return 1;
-  const drive = clamp(audioReactiveState.volume * 0.8 + audioReactiveState.high * 0.45, 0, 1.4);
-  return 1 + drive * state.audio.reactivity;
+  return window.GGAudioReactiveCore.factors(audioReactiveState, state.audio.enabled, state.audio.reactivity).line;
 }
 
 function speedScale(value) {
@@ -970,113 +933,15 @@ function sanitizeState() {
 }
 
 function snapshotState() {
-  return {
-    category: state.category,
-    mode: state.mode,
-    shaderMode: state.shaderMode,
-    combo: {
-      layerCount: state.combo.layerCount,
-      layers: state.combo.layers.map((layer) => ({
-        mode: layer.mode,
-        blend: layer.blend
-      }))
-    },
-    paletteName: state.paletteName,
-    baseTone: state.baseTone,
-    seed: state.seed,
-    params: {
-      density: state.params.density,
-      speed: state.params.speed,
-      lineWidth: state.params.lineWidth
-    },
-    post: {
-      enabled: state.post.enabled,
-      bloom: state.post.bloom,
-      chroma: state.post.chroma,
-      grain: state.post.grain,
-      vignette: state.post.vignette
-    },
-    audio: {
-      enabled: state.audio.enabled,
-      input: state.audio.input,
-      reactivity: state.audio.reactivity
-    }
-  };
+  return window.GGHistoryStore.createSnapshot(state);
 }
 
 function snapshotsEqual(a, b) {
-  const layersEqual =
-    a.combo.layerCount === b.combo.layerCount &&
-    a.combo.layers.length === b.combo.layers.length &&
-    a.combo.layers.every(
-      (layer, i) => layer.mode === b.combo.layers[i].mode && layer.blend === b.combo.layers[i].blend
-    );
-
-  return (
-    a.category === b.category &&
-    a.mode === b.mode &&
-    a.shaderMode === b.shaderMode &&
-    layersEqual &&
-    a.paletteName === b.paletteName &&
-    a.baseTone === b.baseTone &&
-    a.seed === b.seed &&
-    a.params.density === b.params.density &&
-    a.params.speed === b.params.speed &&
-    a.params.lineWidth === b.params.lineWidth &&
-    a.post.enabled === b.post.enabled &&
-    a.post.bloom === b.post.bloom &&
-    a.post.chroma === b.post.chroma &&
-    a.post.grain === b.post.grain &&
-    a.post.vignette === b.post.vignette &&
-    a.audio.enabled === b.audio.enabled &&
-    a.audio.input === b.audio.input &&
-    a.audio.reactivity === b.audio.reactivity
-  );
+  return window.GGHistoryStore.snapshotsEqual(a, b);
 }
 
 function pushHistory(snapshot) {
-  const next = {
-    category: snapshot.category,
-    mode: snapshot.mode,
-    shaderMode: snapshot.shaderMode,
-    combo: {
-      layerCount: snapshot.combo.layerCount,
-      layers: snapshot.combo.layers.map((layer) => ({
-        mode: layer.mode,
-        blend: layer.blend
-      }))
-    },
-    paletteName: snapshot.paletteName,
-    baseTone: snapshot.baseTone,
-    seed: snapshot.seed,
-    params: {
-      density: snapshot.params.density,
-      speed: snapshot.params.speed,
-      lineWidth: snapshot.params.lineWidth
-    },
-    post: {
-      enabled: snapshot.post.enabled,
-      bloom: snapshot.post.bloom,
-      chroma: snapshot.post.chroma,
-      grain: snapshot.post.grain,
-      vignette: snapshot.post.vignette
-    },
-    audio: {
-      enabled: snapshot.audio.enabled,
-      input: snapshot.audio.input,
-      reactivity: snapshot.audio.reactivity
-    }
-  };
-
-  const last = state.history[state.history.length - 1];
-  if (last && snapshotsEqual(last, next)) {
-    return;
-  }
-
-  state.history.push(next);
-  if (state.history.length > HISTORY_LIMIT) {
-    state.history.shift();
-  }
+  window.GGHistoryStore.push(state.history, snapshot, HISTORY_LIMIT);
 }
 
 function updateHistoryUI() {
@@ -1095,9 +960,7 @@ function updateAudioUiVisibility() {
 }
 
 function setAudioLevelText() {
-  audioLevel.textContent = `Low ${Math.round(audioReactiveState.low * 100)}% Mid ${Math.round(audioReactiveState.mid * 100)}% High ${Math.round(
-    audioReactiveState.high * 100
-  )}%`;
+  audioLevel.textContent = window.GGAudioReactiveCore.levelText(audioReactiveState);
 }
 
 function resetAudioReactiveState() {
@@ -1328,33 +1191,12 @@ function defaultPresetName() {
 }
 
 function loadPresetStore() {
-  try {
-    const raw = window.localStorage.getItem(PRESET_STORAGE_KEY);
-    if (!raw) {
-      presetStore.items = [];
-      presetStore.selectedId = "";
-      return;
-    }
-
-    const parsed = JSON.parse(raw);
-    if (!Array.isArray(parsed)) {
-      presetStore.items = [];
-      presetStore.selectedId = "";
-      return;
-    }
-
-    presetStore.items = parsed
-      .filter((item) => item && typeof item === "object" && item.id && item.name && item.snapshot)
-      .slice(0, PRESET_LIMIT);
-    presetStore.selectedId = presetStore.items[0]?.id || "";
-  } catch {
-    presetStore.items = [];
-    presetStore.selectedId = "";
-  }
+  presetStore.items = window.GGPresetStore.load(PRESET_STORAGE_KEY, PRESET_LIMIT);
+  presetStore.selectedId = presetStore.items[0]?.id || "";
 }
 
 function persistPresetStore() {
-  window.localStorage.setItem(PRESET_STORAGE_KEY, JSON.stringify(presetStore.items.slice(0, PRESET_LIMIT)));
+  window.GGPresetStore.persist(PRESET_STORAGE_KEY, presetStore.items, PRESET_LIMIT);
 }
 
 function refreshPresetSelect() {
@@ -1403,12 +1245,7 @@ function saveCurrentPreset() {
     updatedAt: Date.now()
   };
 
-  if (existingIndex >= 0) {
-    presetStore.items.splice(existingIndex, 1);
-  }
-
-  presetStore.items.unshift(entry);
-  presetStore.items = presetStore.items.slice(0, PRESET_LIMIT);
+  presetStore.items = window.GGPresetStore.upsert(presetStore.items, entry, PRESET_LIMIT);
   presetStore.selectedId = entry.id;
   persistPresetStore();
   refreshPresetSelect();
@@ -1433,7 +1270,7 @@ function deleteSelectedPreset() {
     return;
   }
 
-  presetStore.items = presetStore.items.filter((item) => item.id !== selectedId);
+  presetStore.items = window.GGPresetStore.remove(presetStore.items, selectedId);
   presetStore.selectedId = presetStore.items[0]?.id || "";
   persistPresetStore();
   refreshPresetSelect();
@@ -1511,61 +1348,63 @@ function syncControlsFromState() {
 
 function syncUrlFromState() {
   const url = new URL(window.location.href);
-  url.searchParams.set(URL_KEYS.category, state.category);
-  url.searchParams.set(URL_KEYS.mode, state.mode);
-  url.searchParams.set(URL_KEYS.shaderMode, state.shaderMode);
-  url.searchParams.set(URL_KEYS.comboLayerCount, String(state.combo.layerCount));
-  url.searchParams.set(URL_KEYS.comboMode1, state.combo.layers[0].mode);
-  url.searchParams.set(URL_KEYS.comboMode2, state.combo.layers[1].mode);
-  url.searchParams.set(URL_KEYS.comboMode3, state.combo.layers[2].mode);
-  url.searchParams.set(URL_KEYS.comboMode4, state.combo.layers[3].mode);
-  url.searchParams.set(URL_KEYS.comboBlend2, state.combo.layers[1].blend);
-  url.searchParams.set(URL_KEYS.comboBlend3, state.combo.layers[2].blend);
-  url.searchParams.set(URL_KEYS.comboBlend4, state.combo.layers[3].blend);
-  url.searchParams.set(URL_KEYS.palette, state.paletteName);
-  url.searchParams.set(URL_KEYS.baseTone, state.baseTone);
-  url.searchParams.set(URL_KEYS.seed, String(state.seed));
-  url.searchParams.set(URL_KEYS.density, trimFloat(state.params.density));
-  url.searchParams.set(URL_KEYS.speed, trimFloat(state.params.speed));
-  url.searchParams.set(URL_KEYS.lineWidth, trimFloat(state.params.lineWidth));
-  url.searchParams.set(URL_KEYS.fxEnabled, state.post.enabled ? "1" : "0");
-  url.searchParams.set(URL_KEYS.fxBloom, trimFloat(state.post.bloom));
-  url.searchParams.set(URL_KEYS.fxChroma, trimFloat(state.post.chroma));
-  url.searchParams.set(URL_KEYS.fxGrain, trimFloat(state.post.grain));
-  url.searchParams.set(URL_KEYS.fxVignette, trimFloat(state.post.vignette));
-  url.searchParams.set(URL_KEYS.audioEnabled, state.audio.enabled ? "1" : "0");
-  url.searchParams.set(URL_KEYS.audioInput, state.audio.input);
-  url.searchParams.set(URL_KEYS.audioReactive, trimFloat(state.audio.reactivity));
+  const qs = window.GGUrlSync;
+  qs.set(url, URL_KEYS.category, state.category);
+  qs.set(url, URL_KEYS.mode, state.mode);
+  qs.set(url, URL_KEYS.shaderMode, state.shaderMode);
+  qs.set(url, URL_KEYS.comboLayerCount, String(state.combo.layerCount));
+  qs.set(url, URL_KEYS.comboMode1, state.combo.layers[0].mode);
+  qs.set(url, URL_KEYS.comboMode2, state.combo.layers[1].mode);
+  qs.set(url, URL_KEYS.comboMode3, state.combo.layers[2].mode);
+  qs.set(url, URL_KEYS.comboMode4, state.combo.layers[3].mode);
+  qs.set(url, URL_KEYS.comboBlend2, state.combo.layers[1].blend);
+  qs.set(url, URL_KEYS.comboBlend3, state.combo.layers[2].blend);
+  qs.set(url, URL_KEYS.comboBlend4, state.combo.layers[3].blend);
+  qs.set(url, URL_KEYS.palette, state.paletteName);
+  qs.set(url, URL_KEYS.baseTone, state.baseTone);
+  qs.set(url, URL_KEYS.seed, String(state.seed));
+  qs.set(url, URL_KEYS.density, trimFloat(state.params.density));
+  qs.set(url, URL_KEYS.speed, trimFloat(state.params.speed));
+  qs.set(url, URL_KEYS.lineWidth, trimFloat(state.params.lineWidth));
+  qs.set(url, URL_KEYS.fxEnabled, state.post.enabled ? "1" : "0");
+  qs.set(url, URL_KEYS.fxBloom, trimFloat(state.post.bloom));
+  qs.set(url, URL_KEYS.fxChroma, trimFloat(state.post.chroma));
+  qs.set(url, URL_KEYS.fxGrain, trimFloat(state.post.grain));
+  qs.set(url, URL_KEYS.fxVignette, trimFloat(state.post.vignette));
+  qs.set(url, URL_KEYS.audioEnabled, state.audio.enabled ? "1" : "0");
+  qs.set(url, URL_KEYS.audioInput, state.audio.input);
+  qs.set(url, URL_KEYS.audioReactive, trimFloat(state.audio.reactivity));
   window.history.replaceState(null, "", url);
 }
 
 function applyStateFromUrl() {
   const url = new URL(window.location.href);
-  const categoryParam = url.searchParams.get(URL_KEYS.category);
-  const modeParam = url.searchParams.get(URL_KEYS.mode);
-  const shaderModeParam = url.searchParams.get(URL_KEYS.shaderMode);
-  const comboLayerCountParam = url.searchParams.get(URL_KEYS.comboLayerCount);
-  const comboMode1Param = url.searchParams.get(URL_KEYS.comboMode1);
-  const comboMode2Param = url.searchParams.get(URL_KEYS.comboMode2);
-  const comboMode3Param = url.searchParams.get(URL_KEYS.comboMode3);
-  const comboMode4Param = url.searchParams.get(URL_KEYS.comboMode4);
-  const comboBlend2Param = url.searchParams.get(URL_KEYS.comboBlend2);
-  const comboBlend3Param = url.searchParams.get(URL_KEYS.comboBlend3);
-  const comboBlend4Param = url.searchParams.get(URL_KEYS.comboBlend4);
-  const paletteParam = url.searchParams.get(URL_KEYS.palette);
-  const baseToneParam = url.searchParams.get(URL_KEYS.baseTone);
-  const seedParam = url.searchParams.get(URL_KEYS.seed);
-  const densityParam = url.searchParams.get(URL_KEYS.density);
-  const speedParam = url.searchParams.get(URL_KEYS.speed);
-  const lineWidthParam = url.searchParams.get(URL_KEYS.lineWidth);
-  const fxEnabledParam = url.searchParams.get(URL_KEYS.fxEnabled);
-  const fxBloomParam = url.searchParams.get(URL_KEYS.fxBloom);
-  const fxChromaParam = url.searchParams.get(URL_KEYS.fxChroma);
-  const fxGrainParam = url.searchParams.get(URL_KEYS.fxGrain);
-  const fxVignetteParam = url.searchParams.get(URL_KEYS.fxVignette);
-  const audioEnabledParam = url.searchParams.get(URL_KEYS.audioEnabled);
-  const audioInputParam = url.searchParams.get(URL_KEYS.audioInput);
-  const audioReactiveParam = url.searchParams.get(URL_KEYS.audioReactive);
+  const qs = window.GGUrlSync;
+  const categoryParam = qs.get(url, URL_KEYS.category);
+  const modeParam = qs.get(url, URL_KEYS.mode);
+  const shaderModeParam = qs.get(url, URL_KEYS.shaderMode);
+  const comboLayerCountParam = qs.get(url, URL_KEYS.comboLayerCount);
+  const comboMode1Param = qs.get(url, URL_KEYS.comboMode1);
+  const comboMode2Param = qs.get(url, URL_KEYS.comboMode2);
+  const comboMode3Param = qs.get(url, URL_KEYS.comboMode3);
+  const comboMode4Param = qs.get(url, URL_KEYS.comboMode4);
+  const comboBlend2Param = qs.get(url, URL_KEYS.comboBlend2);
+  const comboBlend3Param = qs.get(url, URL_KEYS.comboBlend3);
+  const comboBlend4Param = qs.get(url, URL_KEYS.comboBlend4);
+  const paletteParam = qs.get(url, URL_KEYS.palette);
+  const baseToneParam = qs.get(url, URL_KEYS.baseTone);
+  const seedParam = qs.get(url, URL_KEYS.seed);
+  const densityParam = qs.get(url, URL_KEYS.density);
+  const speedParam = qs.get(url, URL_KEYS.speed);
+  const lineWidthParam = qs.get(url, URL_KEYS.lineWidth);
+  const fxEnabledParam = qs.get(url, URL_KEYS.fxEnabled);
+  const fxBloomParam = qs.get(url, URL_KEYS.fxBloom);
+  const fxChromaParam = qs.get(url, URL_KEYS.fxChroma);
+  const fxGrainParam = qs.get(url, URL_KEYS.fxGrain);
+  const fxVignetteParam = qs.get(url, URL_KEYS.fxVignette);
+  const audioEnabledParam = qs.get(url, URL_KEYS.audioEnabled);
+  const audioInputParam = qs.get(url, URL_KEYS.audioInput);
+  const audioReactiveParam = qs.get(url, URL_KEYS.audioReactive);
 
   if (categoryParam) {
     state.category = categoryParam;
@@ -1970,7 +1809,53 @@ function activeDisplayCanvas() {
   return state.category === "shader3d" ? glCanvas : canvas;
 }
 
+function initGrainWorker() {
+  if (grainWorkerState.worker || typeof Worker === "undefined") {
+    return;
+  }
+
+  try {
+    const worker = new Worker("workers/grain-worker.js");
+    worker.onmessage = (event) => {
+      const widthVal = event.data.width;
+      const heightVal = event.data.height;
+      const pixels = new Uint8ClampedArray(event.data.pixels);
+      grainWorkerState.latest = new ImageData(pixels, widthVal, heightVal);
+      grainWorkerState.pending = false;
+    };
+    worker.onerror = () => {
+      grainWorkerState.pending = false;
+    };
+    grainWorkerState.worker = worker;
+  } catch {
+    grainWorkerState.worker = null;
+  }
+}
+
+function requestGrainFrame() {
+  if (!grainWorkerState.worker || grainWorkerState.pending) {
+    return;
+  }
+  grainWorkerState.pending = true;
+  grainWorkerState.worker.postMessage({
+    width: grainCanvas.width,
+    height: grainCanvas.height,
+    seed: Math.floor(Math.random() * 0xffffffff)
+  });
+}
+
 function drawGrainTexture() {
+  initGrainWorker();
+
+  if (grainWorkerState.worker) {
+    if (grainWorkerState.latest) {
+      grainCtx.putImageData(grainWorkerState.latest, 0, 0);
+      grainWorkerState.latest = null;
+    }
+    requestGrainFrame();
+    return;
+  }
+
   const image = grainCtx.createImageData(grainCanvas.width, grainCanvas.height);
   const arr = image.data;
   for (let i = 0; i < arr.length; i += 4) {
@@ -2099,45 +1984,59 @@ function resize() {
   regenerate();
 }
 
-function regenerate() {
-  state.frame = 0;
-  state.rand = mulberry32(state.seed);
-  applyPaletteToUI();
-  baseCtx2d.setLineDash([]);
-  baseCtx2d.fillStyle = baseBackgroundColor();
-  baseCtx2d.fillRect(0, 0, width, height);
-
-  if (state.category === "classic") {
-    ctx = baseCtx2d;
-    getMode(state.mode).build(state.rand);
-    getMode(state.mode).draw();
-  } else if (state.category === "combo") {
-    regenerateComboData();
-    drawComboFrame();
-  } else {
-    initShaderRenderer();
-    drawShaderFrame();
+function getRenderPipeline() {
+  if (renderPipeline) {
+    return renderPipeline;
   }
 
-  drawPostFXOverlay();
-  composeCaptureCanvas();
+  renderPipeline = window.GGRenderPipeline.create({
+    state,
+    beforeRegenerate() {
+      state.rand = mulberry32(state.seed);
+      applyPaletteToUI();
+      baseCtx2d.setLineDash([]);
+      baseCtx2d.fillStyle = baseBackgroundColor();
+      baseCtx2d.fillRect(0, 0, width, height);
+    },
+    renderClassicRegenerate() {
+      ctx = baseCtx2d;
+      getMode(state.mode).build(state.rand);
+      getMode(state.mode).draw();
+    },
+    renderComboRegenerate() {
+      regenerateComboData();
+      drawComboFrame();
+    },
+    renderShaderRegenerate() {
+      initShaderRenderer();
+      drawShaderFrame();
+    },
+    renderClassicFrame() {
+      ctx = baseCtx2d;
+      getMode(state.mode).draw();
+    },
+    renderComboFrame() {
+      drawComboFrame();
+    },
+    renderShaderFrame() {
+      drawShaderFrame();
+    },
+    afterFrame() {
+      drawPostFXOverlay();
+      composeCaptureCanvas();
+    }
+  });
+
+  return renderPipeline;
+}
+
+function regenerate() {
+  getRenderPipeline().regenerate();
 }
 
 function tick() {
   updateAudioReactiveState();
-  if (state.running) {
-    state.frame += 1;
-    if (state.category === "classic") {
-      ctx = baseCtx2d;
-      getMode(state.mode).draw();
-    } else if (state.category === "combo") {
-      drawComboFrame();
-    } else {
-      drawShaderFrame();
-    }
-    drawPostFXOverlay();
-    composeCaptureCanvas();
-  }
+  getRenderPipeline().step();
   animationId = requestAnimationFrame(tick);
 }
 
@@ -3018,32 +2917,11 @@ function updateRecordStatus(text) {
 }
 
 function downloadBlob(blob, filename) {
-  const url = URL.createObjectURL(blob);
-  const link = document.createElement("a");
-  link.download = filename;
-  link.href = url;
-  link.click();
-  setTimeout(() => URL.revokeObjectURL(url), 1500);
+  window.GGExporterCore.downloadBlob(blob, filename);
 }
 
 function pickWebmMimeType() {
-  if (typeof MediaRecorder === "undefined") {
-    return "";
-  }
-
-  const candidates = [
-    "video/webm;codecs=vp9",
-    "video/webm;codecs=vp8",
-    "video/webm"
-  ];
-
-  for (const type of candidates) {
-    if (MediaRecorder.isTypeSupported(type)) {
-      return type;
-    }
-  }
-
-  return "";
+  return window.GGExporterCore.pickWebmMimeType();
 }
 
 function startWebmRecording() {
@@ -3539,8 +3417,21 @@ exportGifBtn.addEventListener("click", () => {
 });
 
 window.addEventListener("resize", resize);
+document.addEventListener("visibilitychange", () => {
+  if (document.hidden) {
+    state._runningBeforeHidden = state.running;
+    state.running = false;
+  } else if (state._runningBeforeHidden !== undefined) {
+    state.running = Boolean(state._runningBeforeHidden);
+  }
+  pauseBtn.textContent = state.running ? "Pause" : "Resume";
+});
 window.addEventListener("beforeunload", () => {
   disconnectAudioRouting({ stopStream: true, pauseMedia: true });
+  if (grainWorkerState.worker) {
+    grainWorkerState.worker.terminate();
+    grainWorkerState.worker = null;
+  }
   if (audioRuntime.uploadedUrl) {
     URL.revokeObjectURL(audioRuntime.uploadedUrl);
     audioRuntime.uploadedUrl = "";

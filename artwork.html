@@ -1,0 +1,35 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Artwork Detail</title>
+  <link rel="stylesheet" href="artwork.css">
+</head>
+<body>
+  <main class="detail-shell">
+    <header class="detail-head">
+      <h1 id="artTitle">Artwork</h1>
+      <p id="artMeta">Loading...</p>
+      <div class="head-actions">
+        <button id="openGeneratorBtn" type="button">Open In Generator</button>
+        <button id="copyLinkBtn" type="button">Copy Share URL</button>
+        <button id="copyJsonBtn" type="button">Copy JSON</button>
+        <button id="backBtn" type="button">Back Gallery</button>
+      </div>
+    </header>
+
+    <section class="preview-wrap">
+      <img id="artThumb" class="art-thumb" alt="Artwork thumbnail">
+    </section>
+
+    <section class="info-wrap">
+      <h2>Parameters</h2>
+      <div id="chips" class="chips"></div>
+      <pre id="jsonView" class="json-view"></pre>
+    </section>
+  </main>
+
+  <script src="artwork.js"></script>
+</body>
+</html>

@@ -1,6 +1,6 @@
 # Generative Garden
 
-Interactive generative art website with 30 classic modes, shader 3D rendering, multi-layer combiner, post-FX chain, presets, gallery, and recording export.
+Interactive generative art website with 30 classic modes, shader 3D rendering, multi-layer combiner, post-FX chain, audio reactive control, presets, gallery, artwork detail page, and recording export.
 
 ## Links
 
@@ -16,6 +16,8 @@ python3 -m http.server 8000
 Open: `http://localhost:8000`
 
 Gallery: `http://localhost:8000/gallery.html`
+
+Artwork detail: `http://localhost:8000/artwork.html?id=<preset-id>`
 
 ## Art modes (30)
 
@@ -59,21 +61,42 @@ Gallery: `http://localhost:8000/gallery.html`
 - Parameter panel: `Density`, `Speed`, `Line Width`
 - Post-FX chain:
   - `Bloom`, `Chromatic`, `Grain`, `Vignette`
+- Audio reactive:
+  - built-in demo tracks (`Beat Bloom`, `Ambient Drift`, `Arp Sparks`)
+  - upload local audio file
+  - microphone input
+  - reactivity control
 - Randomize button with selectable attributes:
   - `Category`, `Mode`, `Blend`, `Palette`, `Seed`, `Density`, `Speed`, `Line Width`
 - Preset system (localStorage):
   - save/apply/delete presets in browser
 - Gallery page:
   - local preset cards with thumbnail preview
-  - open/copy-link/delete preset
+  - open/details/copy-link/delete preset
+- Artwork detail page:
+  - preview, parameter chips, full JSON, copy JSON
+  - open in generator / copy share URL
 - Undo previous generated settings (front-end history stack, max 30)
-- URL sync for shareable settings (`c`, `m`, `sm`, `cl`, `a`, `b`, `c3`, `c4`, `bm`, `b3`, `b4`, `p`, `s`, `d`, `v`, `w`, `fxe`, `fb`, `fc`, `fg`, `fv`)
+- URL sync for shareable settings (`c`, `m`, `sm`, `cl`, `a`, `b`, `c3`, `c4`, `bm`, `b3`, `b4`, `p`, `bg`, `s`, `d`, `v`, `w`, `fxe`, `fb`, `fc`, `fg`, `fv`, `ae`, `ai`, `ar`)
 - Export options:
   - `PNG`
   - `WebM` recording (start/stop)
   - `GIF` export (4s clip, fixed seam-safe capture path)
 - `Regenerate`, `Pause/Resume`, `Copy Share URL`
 - Responsive layout (desktop + mobile)
+
+## Internal structure
+
+- `core/`
+  - `state-store.js` initial state + shared limits
+  - `history-store.js` snapshot/equality/history push
+  - `url-sync.js` URL param helpers
+  - `preset-store.js` local preset persistence helpers
+  - `audio-reactive.js` audio factor helpers
+  - `exporter.js` export helper functions
+- `modes/registry.js` mode registry by category
+- `renderers/pipeline.js` layered render orchestration
+- `workers/grain-worker.js` grain texture generation in Web Worker
 
 ## Notes
 
