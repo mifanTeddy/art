@@ -85,11 +85,11 @@ const state = {
     lineWidth: 1
   },
   post: {
-    enabled: true,
-    bloom: 0.4,
-    chroma: 0.2,
-    grain: 0.2,
-    vignette: 0.3
+    enabled: false,
+    bloom: 0.2,
+    chroma: 0.08,
+    grain: 0.1,
+    vignette: 0.15
   },
   frame: 0,
   data: null,
@@ -866,10 +866,10 @@ function sanitizeState() {
   }
 
   state.post.enabled = Boolean(state.post.enabled);
-  state.post.bloom = clamp01(parseNum(state.post.bloom, 0.4));
-  state.post.chroma = clamp01(parseNum(state.post.chroma, 0.2));
-  state.post.grain = clamp01(parseNum(state.post.grain, 0.2));
-  state.post.vignette = clamp01(parseNum(state.post.vignette, 0.3));
+  state.post.bloom = clamp01(parseNum(state.post.bloom, 0.2));
+  state.post.chroma = clamp01(parseNum(state.post.chroma, 0.08));
+  state.post.grain = clamp01(parseNum(state.post.grain, 0.1));
+  state.post.vignette = clamp01(parseNum(state.post.vignette, 0.15));
 }
 
 function snapshotState() {
@@ -1610,18 +1610,20 @@ function drawPostFXOverlay() {
   if (state.post.bloom > 0.001) {
     fxCtx.save();
     fxCtx.globalCompositeOperation = "screen";
-    fxCtx.globalAlpha = 0.12 + state.post.bloom * 0.28;
-    fxCtx.filter = `blur(${2 + state.post.bloom * 10}px)`;
+    fxCtx.globalAlpha = 0.03 + state.post.bloom * 0.14;
+    fxCtx.filter = `brightness(${1.05 + state.post.bloom * 0.2}) contrast(${1.02 + state.post.bloom * 0.18}) blur(${
+      1 + state.post.bloom * 6
+    }px)`;
     fxCtx.drawImage(source, 0, 0, width, height);
     fxCtx.filter = "none";
     fxCtx.restore();
   }
 
   if (state.post.chroma > 0.001) {
-    const shift = 0.6 + state.post.chroma * 4.2;
+    const shift = 0.25 + state.post.chroma * 1.8;
     fxCtx.save();
-    fxCtx.globalCompositeOperation = "lighter";
-    fxCtx.globalAlpha = 0.06 + state.post.chroma * 0.18;
+    fxCtx.globalCompositeOperation = "screen";
+    fxCtx.globalAlpha = 0.02 + state.post.chroma * 0.08;
     fxCtx.drawImage(source, -shift, 0, width, height);
     fxCtx.drawImage(source, shift, 0, width, height);
     fxCtx.restore();
@@ -1630,8 +1632,8 @@ function drawPostFXOverlay() {
   if (state.post.grain > 0.001) {
     drawGrainTexture();
     fxCtx.save();
-    fxCtx.globalCompositeOperation = "overlay";
-    fxCtx.globalAlpha = 0.05 + state.post.grain * 0.23;
+    fxCtx.globalCompositeOperation = "soft-light";
+    fxCtx.globalAlpha = 0.015 + state.post.grain * 0.09;
     fxCtx.drawImage(grainCanvas, 0, 0, width, height);
     fxCtx.restore();
   }
@@ -1646,7 +1648,7 @@ function drawPostFXOverlay() {
       Math.max(width, height) * 0.7
     );
     gradient.addColorStop(0, "rgba(0,0,0,0)");
-    gradient.addColorStop(1, `rgba(0,0,0,${0.15 + state.post.vignette * 0.45})`);
+    gradient.addColorStop(1, `rgba(0,0,0,${0.05 + state.post.vignette * 0.25})`);
     fxCtx.fillStyle = gradient;
     fxCtx.fillRect(0, 0, width, height);
   }
